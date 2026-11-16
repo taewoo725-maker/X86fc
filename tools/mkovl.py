@@ -40,11 +40,15 @@ if ovsz is None:
 out = bytearray()
 for n, mod, ents in sorted(cfg):
     asm = 'ov%d.asm' % n
+    org = [e for e in ents if e.startswith('org=')]
     with open(asm, 'w', encoding='utf-8', newline='\n') as f:
-        f.write('        include "ovsym.inc"\n        org     OVBASE\n')
-        for en in ents:
-            f.write('        jp      %s\n' % en)
-        f.write('        include "%s"\n' % mod)
+        if org:   # (0.12.38) org=8000 칸은 모듈이 스스로 org·진입 jp 를 가짐 (매퍼 쪽 페이지 2 에서 실행)
+            f.write('        include "ovsym.inc"\n        include "%s"\n' % mod)
+        else:
+            f.write('        include "ovsym.inc"\n        org     OVBASE\n')
+            for en in ents:
+                f.write('        jp      %s\n' % en)
+            f.write('        include "%s"\n' % mod)
     r = subprocess.run(['pasmo', asm, 'ov%d.bin' % n], capture_output=True, text=True, errors='replace')
     if r.returncode != 0:
         print('오버레이 %d 조립 실패:' % n, (r.stdout + r.stderr)[:600]); sys.exit(1)
@@ -52,6 +56,9 @@ for n, mod, ents in sorted(cfg):
     print('오버레이 %d (%s): %d 바이트 / 칸 %d' % (n, mod, len(b), ovsz))
     if len(b) > ovsz:
         print('  칸을 넘음 — x86fc.asm 의 OVSZ 를 늘리세요'); sys.exit(1)
+    ovb = dict(syms).get('OVBASE')
+    if not org and ovb is not None and ovb + len(b) > 0x8000:   # (0.12.49) 매퍼 쪽을 끼우면 8000h 위는 가려짐 (인계문서 '메모리 구조' 규칙 B)
+        print('  !!! 오버레이 끝이 8000h 를 넘음: OVBASE %04Xh + %d = %04Xh — 본체 코드를 줄이거나 이 칸을 줄이세요' % (ovb, len(b), ovb + len(b))); sys.exit(1)
     out += b + bytes(ovsz - len(b))
 # (0.12.14) 글꼴(hgl.bin = mkhgl.py 가 만든 X86FC.HGL)을 OVL 뒤에 붙임: 16바이트 표식 "X86FC-HGL1" + 글꼴 11172자 x 18B + EUC-KR 표.
 #   NOHGL=1 이면 붙이지 않음 (회귀 시험용 작은 OVL)

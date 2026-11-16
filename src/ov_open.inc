@@ -435,7 +435,7 @@ hp_wait:        call    wait_key
                 jp      h_on
 hp_r:           db      0
 ; F1 안내 (한 줄 = 글 하나, 끝 0FFh)
-help_txt:       db      "X86FC 0.12.35 - Help",0
+help_txt:       db      "X86FC 0.12.44 - Help",0
                 db      " ",0
                 db      "FUNCTION KEYS   (F6-F10 = Shift+F1 ... Shift+F5)",0
                 db      "F1          Help                      F6          Rename",0
@@ -443,7 +443,6 @@ help_txt:       db      "X86FC 0.12.35 - Help",0
                 db      "F3          View + Edit               F8          Sort: name/ext/size/date",0
                 db      "F4          Screen: text / 7 / 7H     F9          Drive (active panel)",0
                 db      "F5          MSX-BASIC                 F10         Exit",0
-                db      " ",0
                 db      "OTHER KEYS",0
                 db      "Up Down     Move cursor               Tab         Other panel",0
                 db      "Left Right  Page up / down            Enter       Open / run / link program",0
@@ -457,6 +456,8 @@ help_txt:       db      "X86FC 0.12.35 - Help",0
                 db      "Ctrl+F3     Programs of this type                 ",0
                 db      "ESC         Show the DOS screen (any key to come back)",0
                 db      "Han/Eng key  Han/Eng while typing a name (7H, Hangul 2-set)",0
+                db      "Editor (F3) ^F Find  F3 Next  ^R Replace  ^G Goto line  Shift+Arrows or ^B Select",0
+                db      "            ^C Copy  ^X Cut  ^V Paste  ^Y Delete line  ^D Duplicate line  ^Z Undo  ^S Save",0
                 db      "Press any key",0
                 db      0FFh
 

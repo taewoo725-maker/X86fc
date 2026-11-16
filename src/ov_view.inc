@@ -1,7 +1,8 @@
 ; 만든이: KimTaeWoo
 ; X86FC 편집기 (오버레이 1) - SPDX-License-Identifier: GPL-3.0-or-later  (F2 보기는 ov_viewer.inc = 오버레이 4)
-v_name:         ds      16                      ; 파일 이름 (제목 줄)
-v_row:          db      0
+; (0.12.42) 편집기 상태 변수는 edvars.inc (쪽 3, LVSTK) 로 옮김: 명령(찾기·바꾸기·줄 이동)은 오버레이 10 (ov_edit2.inc)에서 하고 돌아옴
+                include "edvars.inc"
+                include "edundo.inc"
 
 ; ======================================================================
 ; F3 보기 + 편집 (메모장식 간단 편집기)
@@ -9,36 +10,8 @@ v_row:          db      0
 ;  글쇠: 화살표 이동, Ctrl+↑↓ 한 쪽, HOME 줄 처음, SELECT 줄 끝, BS/DEL 지우기, RETURN 줄 바꿈, TAB, 글자 입력,
 ;        Ctrl+S(F5) 저장, ESC 끝내기(고친 게 있으면 저장 물음)
 ; ======================================================================
-EDMAX           equ     16000
-EDBUF           equ     8000h
 POSIT           equ     00C6h
 ; ---- 매퍼 보조: 지원 루틴 표를 찾고 쪽을 할당/반납, 페이지 2 전환 ----
-map_init:       ld      hl,0
-                ld      de,0402h
-                xor     a
-                ld      b,0
-                call    0FFCAh
-                ld      a,h
-                or      l
-                jr      z,mi_no
-                ld      (mp_all),hl
-                ld      de,3
-                add     hl,de
-                ld      (mp_fre),hl
-                ld      de,33
-                add     hl,de                   ; 표 + 36 = PUT_P2
-                ld      (mp_put),hl
-                ld      de,3
-                add     hl,de                   ; 표 + 39 = GET_P2
-                ld      (mp_get),hl
-                or      a
-                ret
-mi_no:          scf
-                ret
-mp_alloc:       xor     a                       ; 사용자 쪽, 기본 매퍼 → CF = 실패, A = 쪽 번호
-                ld      b,0
-                ld      hl,(mp_all)
-                jp      (hl)
 mp_free:        ld      b,0                     ; A = 쪽 번호
                 ld      hl,(mp_fre)
                 jp      (hl)
@@ -47,129 +20,8 @@ mp_putp2:       ld      hl,(mp_put)             ; A = 쪽 번호
 mp_getp2:       ld      hl,(mp_get)             ; → A = 지금 페이지 2 쪽
                 jp      (hl)
 ; ---- 시작 ----
-do_edit:        call    cur_ix
-                ld      a,(ix+PS_COUNT)
-                or      (ix+PS_COUNT+1)
-                ret     z
-                ld      l,(ix+PS_CUR)
-                ld      h,(ix+PS_CUR+1)
-                call    ptr_get
-                ld      (en_p),hl
-                ld      de,EN_ATTR
-                add     hl,de
-                bit     4,(hl)
-                jr      z,de_f
-                ld      hl,txt_notfile
-                ld      (msg_p),hl
-                ret
-de_f:           ld      hl,(en_p)
-                ld      de,EN_ATTR
-                add     hl,de
-                ld      a,(hl)
-                and     27h
-                ld      (ed_attr),a
-                ld      hl,(en_p)               ; 크기: 16000 바이트까지
-                ld      de,EN_SIZE
-                add     hl,de
-                ld      e,(hl)
-                inc     hl
-                ld      d,(hl)
-                inc     hl
-                ld      a,(hl)
-                inc     hl
-                or      (hl)
-                jr      nz,de_big
-                ld      hl,EDMAX
-                or      a
-                sbc     hl,de
-                jr      c,de_big
-                ld      (ed_sz),de
-                jr      de_t
-de_big:         ld      hl,txt_edbig
-                ld      (msg_p),hl
-                ret
-de_t:           ld      a,(ed_force)            ; (0.12.27) #EDIT 로 열면 묻지 않음
-                or      a
-                jr      nz,de_g
-                call    ed_istext               ; 글 파일 형식이 아니면 한 번 더 물음
-                jr      z,de_g
-                ld      hl,txt_edq
-                call    popup_yn
-                ret     nz
-de_g:           call    map_init
-                jr      c,de_nm
-                call    mp_alloc
-                jr      c,de_nm
-                ld      (ed_seg),a
-                jr      de_go
-de_nm:          ld      hl,txt_ednomem
-                ld      (msg_p),hl
-                ret
-de_go:          call    ed_geom
-                ld      hl,(en_p)
-                call    disp_name
-                ld      hl,nmbuf
-                ld      de,v_name
-                ld      bc,16
-                ldir
-                call    cur_ix
-                push    ix
-                pop     hl
-                ld      de,PS_PATH
-                add     hl,de
-                ld      de,srcpath
-                call    mkpath
-                call    mp_getp2
-                ld      (ed_old),a
-                ld      a,(ed_seg)
-                call    mp_putp2
-                ld      de,srcpath
-                ld      a,1
-                ld      c,F_OPEN
-                call    BDOS
-                or      a
-                jr      z,de_o
-                call    explain_err
-                jp      ed_out
-de_o:           ld      a,b
-                ld      (ed_h),a
-                ld      hl,EDBUF
-                ld      (ed_end),hl
-                ld      hl,(ed_sz)
-                ld      a,h
-                or      l
-                jr      z,de_r
-                ex      de,hl
-                ld      hl,(ed_sz)
-                ld      de,EDBUF
-                ld      a,(ed_h)
-                ld      b,a
-                ld      c,F_READ
-                call    BDOS
-                cp      E_EOF
-                jr      z,de_rr
-                or      a
-                jr      z,de_rr
-                ld      hl,0
-de_rr:          ld      de,EDBUF
-                add     hl,de
-                ld      (ed_end),hl
-de_r:           ld      a,(ed_h)
-                ld      b,a
-                ld      c,F_CLOSE
-                call    BDOS
-                ld      hl,EDBUF
-                ld      (ed_cur),hl
-                ld      (ed_top),hl
-                xor     a
-                ld      (ed_mod),a
-                ld      (il_first),a
-                ld      (hk_st),a
-                call    ed_u8ask                ; (0.12.19) 7H: UTF-8 이 아니면 확인 (EUC-KR 등은 ? 로 보이고 바이트는 그대로 저장)
-                jp      nz,ed_out
-                call    clear_screen
-                call    ed_foot
-ed_draw:        call    ed_scroll
+ed_draw:        call    ed_chkwin
+                call    ed_scroll
                 call    ed_paint
 ed_key:         call    il_wait                 ; (0.12.19) 한/영 키(KANAST)를 보며 기다림. 0 = 한/영 상태가 바뀜
                 or      a
@@ -182,6 +34,102 @@ ek_k:           call    ed_han                  ; 한글 모드의 알파벳·�
                 jp      z,ed_esc
                 cp      13h                     ; Ctrl+S / F5
                 jp      z,ed_save
+                ld      d,a                     ; D = 글쇠
+                sub     1Ch                     ; (0.12.43) 이동 글쇠(화살표·HOME·SELECT): Shift 와 같이 누르면 선택 시작·확장
+                cp      4
+                jr      c,ek_mv
+                ld      a,d
+                cp      0Bh
+                jr      z,ek_mv
+                cp      18h
+                jr      nz,ek_nm
+                call    ctrl_down               ; Ctrl+X = 자르기 (SELECT 는 줄 끝)
+                jr      z,ek_nm
+ek_mv:          call    shift_down
+                jr      nz,ek_ns
+                ld      hl,(sel_a)
+                ld      a,h
+                or      l
+                jr      nz,ek_mx
+                ld      hl,(ed_cur)
+                ld      (sel_a),hl
+                xor     a
+                ld      (sel_m),a
+                jr      ek_mx
+ek_ns:          ld      a,(sel_m)
+                or      a
+                jr      nz,ek_mx
+                ld      hl,0
+                ld      (sel_a),hl
+ek_mx:          ld      a,d
+                jp      ek_nc
+ek_nm:          ld      hl,ek_tab               ; 명령 글쇠 표 (글쇠, 명령 번호)
+ek_tl:          ld      a,(hl)
+                inc     hl
+                or      a
+                jr      z,ek_tn
+                cp      d
+                ld      b,(hl)
+                inc     hl
+                jr      nz,ek_tl
+                jr      ek_cmd
+ek_tn:          ld      a,d
+                cp      08h                     ; 선택이 있으면 BS·DEL 은 선택을 지움
+                jr      z,ek_bd
+                cp      7Fh
+                jr      nz,ek_b2
+ek_bd:          ld      hl,(sel_a)
+                ld      a,h
+                or      l
+                ld      a,d
+                jr      z,ek_b2
+                ld      b,14
+                jr      ek_cmd
+ek_b2:          cp      02h                     ; Ctrl+B = 선택 시작 / 해제 (이동해도 안 풀림)
+                jr      nz,ek_nc
+                ld      hl,(sel_a)
+                ld      a,h
+                or      l
+                ld      hl,0
+                jr      nz,ek_b3
+                ld      hl,(ed_cur)
+                ld      a,1
+                ld      (sel_m),a
+ek_b3:          ld      (sel_a),hl
+                jp      ed_draw
+ek_tab:         db      1Ah,15, 06h,1, 10h,2, 0Eh,2, 12h,3, 07h,4, 03h,9, 18h,10, 16h,11, 19h,12, 04h,13, 0
+ek_cmd:         ld      a,b
+                ld      (ed_cmd),a
+                xor     a
+                ld      (ed_rp),a
+ek_go:          call    hk_off                  ; 오버레이 10 으로: 쪽 2 를 원래대로 돌려놓고(오버레이 적재가 8000h 를 덮으므로) 건너감
+                xor     a
+                ld      (hk_st),a
+                ld      a,(ed_old)
+                call    mp_putp2
+                pop     hl                      ; 쌓여 있는 ov_ret 버림 (ov_go 가 다시 쌓음)
+                ld      a,(ed_cmd)              ; 명령 → 칸: 20·21 = EUC-KR 저장(12), 16~19·22 이상 = 큰 파일(14), 그 밖 = 명령(10)
+                ld      b,10
+                cp      16
+                jr      c,ek_g1
+                ld      b,14
+                cp      20
+                jr      c,ek_g1
+                cp      22
+                jr      nc,ek_g1
+                ld      b,12
+ek_g1:          ld      a,b
+                ld      b,0
+                jp      ov_go
+; Shift 키가 눌려 있나: Z = 눌림
+shift_down:     push    ix
+                ld      a,6
+                ld      ix,SNSMAT
+                call    bios
+                pop     ix
+                bit     0,a
+                ret
+ek_nc:
                 cp      K_UP
                 jp      z,ed_kup
                 cp      K_DOWN
@@ -208,6 +156,63 @@ ek_k:           call    ed_han                  ; 한글 모드의 알파벳·�
                 jp      nc,ed_key
 ed_kch:         call    ed_ins1
                 jp      ed_draw
+; ---- (0.12.42) 오버레이 10 에서 돌아옴 (진입 1): 쪽 다시 끼우고 화면 다시 그림.  ed_rp = 바꾸기 확인 중
+ed_resume:      ld      a,(ed_seg)
+                call    mp_putp2
+                call    ed_geom
+                call    clear_screen
+                call    ed_foot
+                ld      a,(ed_rp)
+                or      a
+                jp      z,ed_draw
+                call    ed_scroll
+                call    ed_paint
+                ld      hl,txt_edrp
+                ld      de,txt_edrpb
+                call    popup_ask
+                ld      b,5                     ; Y = 이것 바꾸고 다음, A = 전부, N = 건너뜀, Esc = 그만
+                cp      'Y'
+                jr      z,er_c
+                inc     b
+                cp      'A'
+                jr      z,er_c
+                inc     b
+                cp      'N'
+                jr      z,er_c
+                xor     a
+                ld      (ed_rp),a
+                call    clear_screen
+                call    ed_foot
+                jp      ed_draw
+er_c:           ld      a,b
+                ld      (ed_cmd),a
+                jp      ek_go
+; ---- (0.12.45) 큰 파일: 커서가 창 끝에 다가오면 오버레이 10 이 창을 옮김 (명령 16)
+ed_chkwin:      ld      a,(big)
+                or      a
+                ret     z
+                ld      hl,(ed_end)
+                ld      de,(ed_cur)
+                or      a
+                sbc     hl,de
+                ld      de,2000
+                or      a
+                sbc     hl,de
+                jr      nc,cw_u
+                ld      a,(bw_dn)
+                or      a
+                jr      nz,cw_g
+cw_u:           ld      hl,(ed_cur)
+                ld      de,EDBUF+1500
+                or      a
+                sbc     hl,de
+                ret     nc
+                ld      a,(bw_up)
+                or      a
+                ret     z
+cw_g:           pop     hl                      ; (부른 자리로 안 돌아감)
+                ld      b,16
+                jp      ek_cmd
 ; ---- 닫기 ----
 ed_out:         call    hk_off                  ; (0.12.19) 한/영(KANA) 잠금과 램프 끔
                 xor     a
@@ -216,6 +221,9 @@ ed_out:         call    hk_off                  ; (0.12.19) 한/영(KANA) 잠금
                 call    mp_putp2
                 ld      a,(ed_seg)
                 call    mp_free
+                ld      a,(clip_seg)            ; (0.12.50) 클립보드 쪽도 반납
+                or      a
+                call    nz,mp_free
                 xor     a
                 ld      (CSRSW),a
                 ret
@@ -232,58 +240,28 @@ ed_esc:         ld      a,(ed_mod)
                 call    clear_screen
                 call    ed_foot
                 jp      ed_draw
-ed_sq:          call    ed_wr
-                jr      nz,ed_out               ; 저장 실패면 알림만 남고 닫음
-                jr      ed_out
-ed_save:        call    ed_wr
-                jp      ed_draw
-; 파일 쓰기: 열어서(읽기·쓰기) 처음부터 쓰고, 짧아졌으면 그 자리에서 잘라 냄
-ed_wr:          ld      de,srcpath              ; 같은 이름으로 다시 만듦(내용 비움, 속성 유지)
-                ld      a,(ed_attr)
-                ld      b,a
-                xor     a
-                ld      c,F_CREATE
-                call    BDOS
+ed_sq:          ld      a,(ed_euc)
                 or      a
-                jr      z,ew_o
-                call    explain_err
-                or      1
-                ret
-ew_o:           ld      a,b
-                ld      (ed_h),a
-                ld      hl,(ed_end)
-                ld      de,EDBUF
+                ld      b,21
+                jp      nz,ek_cmd
+                ld      a,(big)
                 or      a
-                sbc     hl,de
-                ld      (ed_wn),hl
-                ld      a,h
-                or      l
-                jr      z,ew_t
-                ld      de,EDBUF
-                ld      a,(ed_h)
-                ld      b,a
-                ld      c,F_WRITE
-                call    BDOS
+                jr      z,sq_s
+                ld      b,18
+                jp      ek_cmd
+sq_s:           ld      b,26                    ; (0.12.49) 작은 파일 저장도 오버레이 14 로 (오버레이 1 을 줄임: 8000h 아래 유지)
+                jp      ek_cmd
+ed_save:        ld      a,(ed_euc)              ; (0.12.46) EUC-KR 로 열었으면 오버레이 12 가 EUC-KR 로 되돌려 씀
                 or      a
-                jr      nz,ew_e
-ew_t:           xor     a
-ew_e:           push    af
-                ld      a,(ed_h)
-                ld      b,a
-                ld      c,F_CLOSE
-                call    BDOS
-                pop     af
+                ld      b,20
+                jp      nz,ek_cmd
+                ld      a,(big)                 ; (0.12.45) 큰 파일은 오버레이 10 이 파일 전체를 다시 씀
                 or      a
-                jr      z,ew_ok
-                call    explain_err
-                or      1
-                ret
-ew_ok:          xor     a
-                ld      (ed_mod),a
-                ld      hl,txt_edsaved
-                ld      (msg_p),hl
-                xor     a
-                ret
+                jr      z,es_s
+                ld      b,17
+                jp      ek_cmd
+es_s:           ld      b,25
+                jp      ek_cmd
 ; ---- 글쇠 처리 ----
 ed_kup:         call    ctrl_down
                 jr      nz,ek_u1
@@ -413,11 +391,20 @@ ed_kret:        ld      a,0Dh
                 jp      ed_draw
 ; A = 글자를 커서 앞에 끼워 넣음 (자리가 모자라면 무시)
 ed_ins1:        ld      (ed_ch),a
+                ld      hl,0
+                ld      (sel_a),hl
                 ld      hl,(ed_end)
                 ld      de,EDBUF+EDMAX
                 or      a
                 sbc     hl,de
                 ret     nc
+                ld      hl,(ed_cur)             ; (0.12.44) 되돌리기 기록: 한 바이트 끼움
+                ld      (sp_pos),hl
+                ld      hl,0
+                ld      (sp_dl),hl
+                inc     hl
+                ld      (sp_sl),hl
+                call    ud_push
                 ld      hl,(ed_end)
                 ld      de,(ed_cur)
                 or      a
@@ -569,61 +556,6 @@ ea_l:           ld      a,(eh_n)
                 or      80h
                 call    ed_ins1
                 jr      ea_l
-; 7H 이고 본문이 UTF-8 이 아니면 확인 팝업: Z = 계속, NZ = 닫기
-ed_u8ask:       ld      a,(s7_h)
-                or      a
-                ret     z
-                call    ed_u8chk
-                ret     z
-                ld      hl,txt_edu8
-                jp      popup_yn
-; 본문(EDBUF ~ ed_end)이 올바른 UTF-8 인가 -> Z = 맞음
-ed_u8chk:       ld      hl,EDBUF
-u8_l:           ld      de,(ed_end)
-                push    hl
-                or      a
-                sbc     hl,de
-                pop     hl
-                jr      c,u8_n
-                xor     a
-                ret
-u8_n:           ld      a,(hl)
-                inc     hl
-                cp      80h
-                jr      c,u8_l
-                cp      0C2h
-                jr      c,u8_bad
-                ld      b,1
-                cp      0E0h
-                jr      c,u8_c
-                inc     b
-                cp      0F0h
-                jr      c,u8_c
-                cp      0F5h
-                jr      nc,u8_bad
-                inc     b
-u8_c:           ld      de,(ed_end)
-                push    hl
-                or      a
-                sbc     hl,de
-                pop     hl
-                jr      nc,u8_bad
-                ld      a,(hl)
-                and     0C0h
-                cp      80h
-                jr      nz,u8_bad
-                inc     hl
-                djnz    u8_c
-                jr      u8_l
-u8_bad:         or      1
-                ret
-txt_edu8:       db      "Not valid UTF-8 (EUC-KR?). Shown as ?, bytes kept. Edit anyway?",0
-txt_edhan:      db      "[HAN]",0
-eh_was:         db      0
-eh_key:         db      0
-eh_cp:          dw      0
-eh_n:           db      0
-eh_p:           dw      0
 ; ---- (0.12.18) UTF-8 글자 단위 (7H 에서만; 그 밖의 방식은 바이트 단위 그대로) ----
 ; HL = 글자 처음 -> HL = 다음 글자 처음 (끝 넘지 않음)
 ed_fwd:         ld      c,(hl)
@@ -673,7 +605,10 @@ el_l:           ld      a,(hl)
                 djnz    el_l
                 ret
 ; 커서 자리의 한 글자 지움 (CR LF 는 ed_del1 이, UTF-8 글자는 바이트 수만큼)
-ed_delc:        ld      hl,(ed_cur)
+ed_delc:        ld      hl,0
+                ld      (sel_a),hl
+                call    ed_lnum
+                ld      hl,(ed_cur)
                 ld      de,(ed_end)
                 push    hl
                 or      a
@@ -714,12 +649,23 @@ ed_del1:        ld      hl,(ed_cur)
                 cp      0Ah
                 jr      nz,ed_del_cur
                 call    ed_del_cur
-ed_del_cur:     ld      hl,(ed_end)
+ed_del_cur:     ld      hl,0
+                ld      (sel_a),hl
+                ld      hl,(ed_end)
                 ld      de,(ed_cur)
                 or      a
                 sbc     hl,de
                 ret     z
                 ret     c
+                push    hl
+                ld      hl,(ed_cur)             ; (0.12.44) 되돌리기 기록: 한 바이트 지움
+                ld      (sp_pos),hl
+                ld      hl,1
+                ld      (sp_dl),hl
+                dec     hl
+                ld      (sp_sl),hl
+                call    ud_push
+                pop     hl
                 dec     hl
                 ld      b,h
                 ld      c,l
@@ -987,7 +933,16 @@ rn_a:           ld      de,(ed_end)
 rn_d:           ld      a,c
                 ret
 ; 화면 그리기 + 커서 위치
-ed_paint:       ld      hl,hbuf
+ed_paint:       call    ed_selr
+                ld      a,(s7_on)
+                or      a
+                jr      nz,ep_nb
+                ld      hl,IMG                  ; SCREEN 0: 깜박임 표 그림을 비움
+                ld      de,IMG+1
+                ld      bc,239
+                ld      (hl),0
+                ldir
+ep_nb:          ld      hl,hbuf
                 ld      de,hbuf+1
                 ld      (hl),' '
                 ld      bc,79
@@ -1008,7 +963,18 @@ ep_h:           ld      a,(hk_on)
                 ld      hl,txt_edhan
                 ld      de,hbuf+50
                 call    copy_z
-ep_i:           xor     a
+ep_i:           call    ed_lnum                 ; HL = 줄, A = 칸
+                push    af
+                ld      de,hbuf+62
+                call    put_dec16
+                ld      a,':'
+                ld      (de),a
+                inc     de
+                pop     af
+                ld      l,a
+                ld      h,0
+                call    put_dec16
+                xor     a
                 call    row_addr
                 ld      de,hbuf
                 ld      b,80
@@ -1024,6 +990,7 @@ ep_l:           ld      (ed_t1),hl
                 ld      de,hbuf
                 ld      b,80
                 call    scr_write
+                call    ed_hlrow
                 ld      hl,(ed_t1)
                 call    ed_nextrow
                 ld      a,(v_row)
@@ -1042,26 +1009,29 @@ ep_x:
                 ld      a,(s7_on)
                 or      a
                 jp      nz,s7_edcur
-; 커서 = 깜박임 표(T2)로 그 칸만 반전: 표를 0 으로 채우고 (줄+1, 칸) 칸의 비트만 켬
-                ld      hl,0800h
-                call    scr_vaddr
-                ld      a,(vdp_dat)
-                ld      c,a
-                ld      hl,270
-ehl_c:          xor     a
-                out     (c),a
-                dec     hl
-                ld      a,h
-                or      l
-                jr      nz,ehl_c
+; 커서 = 깜박임 표(T2) 그림(IMG)에 그 칸의 비트를 켜고(선택 칸은 줄을 그릴 때 이미 켬) 표를 VRAM 0800h 로 보냄
                 ld      a,(ed_row)
                 inc     a
                 call    row_addr                ; HL = 줄 × 80
                 ld      a,(ed_cc)
                 ld      e,a
                 ld      d,0
-                add     hl,de                   ; HL = 칸 번호
-                ld      a,l
+                add     hl,de
+                call    ed_sbit
+                ld      hl,0800h
+                call    scr_vaddr
+                ld      a,(vdp_dat)
+                ld      c,a
+                ld      hl,IMG
+                ld      b,240
+                otir
+                ld      b,30
+                xor     a
+ehl_z:          out     (c),a
+                djnz    ehl_z
+                ret
+; 그림에서 칸 번호 HL 의 비트를 켬
+ed_sbit:        ld      a,l
                 and     7
                 ld      b,a
                 srl     h
@@ -1070,22 +1040,96 @@ ehl_c:          xor     a
                 rr      l
                 srl     h
                 rr      l
-                ld      de,0800h
+                ld      de,IMG
                 add     hl,de
                 ld      a,80h
                 inc     b
-                jr      ehl_s
-ehl_r:          srl     a
-ehl_s:          djnz    ehl_r
-                push    af
-                call    scr_vaddr
-                ld      a,(vdp_dat)
+                jr      esb_s
+esb_r:          srl     a
+esb_s:          djnz    esb_r
+                or      (hl)
+                ld      (hl),a
+                ret
+; 선택 범위 (작은 쪽 sel_lo, 큰 쪽 sel_hi) 계산.  선택이 없으면 sel_hi = 0
+ed_selr:        ld      hl,(sel_a)
+                ld      de,(ed_cur)
+                ld      a,h
+                or      l
+                jr      z,sr_n
+                push    hl
+                or      a
+                sbc     hl,de
+                pop     hl
+                jr      c,sr_s
+                ex      de,hl
+sr_s:           ld      (sel_lo),hl
+                ld      (sel_hi),de
+                ret
+sr_n:           ld      (sel_hi),hl
+                ret
+; 방금 그린 줄(hbuf, v_row)의 선택 칸을 강조: SCREEN 0 = 그림에 비트, 7H·7 = 그 칸을 강조 색으로 다시 찍음
+ed_hlrow:       ld      a,(hs_c0)
                 ld      c,a
-                pop     af
-                out     (c),a
+                ld      a,(hs_c1)
+                sub     c
+                ret     z
+                ret     c
+                ld      (hs_c1),a               ; = 칸 수
+                ld      a,(s7_on)
+                or      a
+                jr      nz,hl_7
+                ld      a,(v_row)
+                inc     a
+                call    row_addr
+                ld      a,(hs_c0)
+                ld      e,a
+                ld      d,0
+                add     hl,de
+                ld      a,(hs_c1)
+                ld      b,a
+hl_l:           push    hl
+                push    bc
+                call    ed_sbit
+                pop     bc
+                pop     hl
+                inc     hl
+                djnz    hl_l
+                ret
+hl_7:           ld      a,(v_row)
+                inc     a
+                ld      (s7_row),a
+                add     a,a
+                add     a,a
+                ld      e,a
+                ld      d,0
+                ld      hl,s7_hash
+                add     hl,de
+                ld      b,4
+                ld      a,0FFh
+hl_h:           ld      (hl),a
+                inc     hl
+                djnz    hl_h
+                ld      a,(hs_c0)
+                ld      (s7_col),a
+                ld      e,a
+                ld      d,0
+                ld      hl,hbuf
+                add     hl,de
+                ld      (s7_tp),hl
+                ld      a,(hs_c1)
+                ld      (s7_n),a
+                ld      a,9
+                ld      (s7_pair),a
+                call    s7_draw
+                xor     a
+                ld      (s7_pair),a
                 ret
 ; HL = 줄 시작 → hbuf 에 그 줄 (끝/빈 곳은 공백)
 ed_rowbuild:    push    hl
+                ld      a,0FFh                  ; (0.12.43) 이 줄의 선택 칸 범위 비움
+                ld      (hs_c0),a
+                xor     a
+                ld      (hs_c1),a
                 ld      hl,hbuf
                 ld      de,hbuf+1
                 ld      (hl),' '
@@ -1111,6 +1155,7 @@ rb_n:           call    ed_chr                  ; B = 바이트 수, C = 폭, DE
                 ld      (rb_g),de
                 ld      a,b
                 ld      (rb_nb),a
+                call    rb_sel
                 ld      a,c
                 or      a
                 jr      z,rb_adv
@@ -1141,6 +1186,31 @@ rb_adv:         ld      a,(rb_nb)
                 ld      d,0
                 add     hl,de
                 jr      rb_l
+; 이 글자(HL, 폭 C)가 선택 안에 있으면 그 칸 범위를 hs_c0..hs_c1 에 넓힘.  BC·HL 보존
+rb_sel:         ld de,(sel_hi)
+                ld a,d
+                or e
+                ret z
+                push hl
+                or a
+                sbc hl,de
+                pop hl
+                ret nc
+                push hl
+                ld de,(sel_lo)
+                or a
+                sbc hl,de
+                pop hl
+                ret c
+                ld a,(hs_c0)
+                cp 0FFh
+                jr nz,rs_e
+                ld a,(rb_c)
+                ld (hs_c0),a
+rs_e:           ld a,(rb_c)
+                add a,c
+                ld (hs_c1),a
+                ret
 ; HL = 글자 처음 (ed_end 앞) -> B = 바이트 수, C = 화면 폭 (0, 1, 2), D E = 그릴 글자 (폭 2 = 한글 쌍).  HL 보존
 ;   7H(s7_h)에서만 UTF-8 해석: 한글 음절(EA..ED 3바이트) = 두 칸, 그 밖의 다바이트 = ? 한 칸, 이음 바이트 단독 = 폭 0.  그 밖의 방식은 80h 이상 = '.'
 ed_chr:         ld      a,(hl)
@@ -1259,6 +1329,75 @@ ec_q3:          ld      d,'?'
                 ld      bc,0101h
                 ret
 ; 바닥 안내 줄: 7H 는 7H 격자의 맨 아래 줄, 그 밖은 23째 줄 (8점 줄)
+; ---- (0.12.42) 커서의 줄 번호(HL, 1부터)와 칸(A, 1부터).  줄 번호는 마지막으로 센 자리(ln_p, ln_n)에서 이어 셈
+ed_lnum:        ld      de,(ln_p)
+                ld      a,d
+                or      e
+                jr      nz,ln_k
+                ld      de,EDBUF
+                ld      (ln_p),de
+                ld      hl,(win_ln)
+                ld      (ln_n),hl
+ln_k:           ld      hl,(ed_cur)
+                or      a
+                sbc     hl,de
+                jr      c,ln_b
+                ld      b,h                     ; 앞으로: ln_p ~ cur 의 줄바꿈 수만큼 더함
+                ld      c,l
+                ld      hl,(ln_p)
+                ld      de,(ln_n)
+ln_f:           ld      a,b
+                or      c
+                jr      z,ln_s
+                ld      a,0Ah
+                cpir
+                jr      nz,ln_s
+                inc     de
+                jp      pe,ln_f
+                jr      ln_s
+ln_b:           ld      hl,(ln_p)               ; 뒤로: cur ~ ln_p 의 줄바꿈 수만큼 뺌
+                ld      bc,(ed_cur)
+                or      a
+                sbc     hl,bc
+                ld      b,h
+                ld      c,l
+                ld      hl,(ed_cur)
+                ld      de,(ln_n)
+ln_bl:          ld      a,b
+                or      c
+                jr      z,ln_s
+                ld      a,0Ah
+                cpir
+                jr      nz,ln_s
+                dec     de
+                jp      pe,ln_bl
+ln_s:           ld      (ln_n),de
+                ld      hl,(ed_cur)
+                ld      (ln_p),hl
+                ld      c,1                     ; 칸 = 줄 처음부터 센 글자 수 + 1 (7H 에서는 UTF-8 이어지는 바이트 제외)
+ln_c:           ld      de,EDBUF
+                or      a
+                sbc     hl,de
+                jr      z,ln_e
+                add     hl,de
+                dec     hl
+                ld      a,(hl)
+                cp      0Ah
+                jr      z,ln_e
+                ld      b,a
+                ld      a,(s7_h)
+                or      a
+                jr      z,ln_i
+                ld      a,b
+                and     0C0h
+                cp      80h
+                jr      z,ln_c
+ln_i:           inc     c
+                jr      nz,ln_c
+                dec     c
+ln_e:           ld      a,c
+                ld      hl,(ln_n)
+                ret
 ed_foot:        ld      a,(s7_h)
                 or      a
                 jr      nz,ef_7
@@ -1288,72 +1427,14 @@ ed_geom:        ld      a,22
                 dec     a
                 ld      (ed_rows),a
                 ret
-ed_rows:        db      22
-ed_gt:          db      0
-rb_c:           db      0
-rb_nb:          db      0
-rb_g:           dw      0
-; 형식 검사: TXT INI DOC BAT CFG → Z
-ed_istext:      ld      hl,(en_p)
-                ld      de,EN_EXT
-                add     hl,de
-                ld      (ed_t1),hl
-                ld      de,ed_exts
-                ld      b,5
-it_l:           push    bc
-                push    de
-                ld      hl,(ed_t1)
-                ld      b,3
-it_c:           ld      a,(de)
-                cp      (hl)
-                jr      nz,it_n
-                inc     hl
-                inc     de
-                djnz    it_c
-                pop     de
-                pop     bc
-                xor     a
-                ret
-it_n:           pop     de
-                inc     de
-                inc     de
-                inc     de
-                pop     bc
-                djnz    it_l
-                or      1
-                ret
-ed_exts:        db      "TXTINIDOCBATCFG"
-txt_edq:        db      "Not a text type. Edit anyway?",0
-txt_edbig:      db      "File too large to edit (16000 bytes max)",0
-txt_ednomem:    db      "No free mapper page for the editor",0
+txt_edhan:      db      "[HAN]",0
+txt_edrp:       db      "Replace?",0
+txt_edrpb:      db      "[Y] Yes  [N] Skip  [A] All  [Esc] Stop",0
 txt_edsave:     db      "Save changes?",0
 txt_edsb:       db      "[Y] Yes   [N] No   [Esc] Cancel",0
-txt_edsaved:    db      "Saved",0
 txt_edname:     db      "EDIT ",0
 txt_edmod:      db      "  [modified]",0
-txt_edfoot:     db      "Arrows  Ctrl+Up/Dn page  Home/Select line ends  Ctrl+S save  Esc close",0
-mp_all:         dw      0
-mp_fre:         dw      0
-mp_put:         dw      0
-mp_get:         dw      0
-ed_end:         dw      0
-ed_cur:         dw      0
-ed_top:         dw      0
-ed_sz:          dw      0
-ed_wn:          dw      0
-ed_t1:          dw      0
-pv_e:           dw      0
-pv_s0:          dw      0
-ed_mod:         db      0
-ed_seg:         db      0
-ed_old:         db      0
-ed_h:           db      0
-ed_row:         db      0
-ed_c1:          db      0
-ed_cc:          db      0
-ed_attr:        db      0
-ed_ch:          db      0
-ed_t2:          dw      0
+txt_edfoot:     db      "^S Save ^F Find F3 Next ^R Repl ^G Line ^B Mark ^C/^X/^V ^Y Del ^D Dup ^Z Undo",0
 
 ; ======================================================================
 ; Ctrl+F 파일 찾기: 활성 패널 폴더에서 아래 하위 폴더까지(깊이 6) 8.3 이름이 틀(* ?)에 맞는 파일을 모아 목록으로 보여 줌.

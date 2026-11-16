@@ -4,6 +4,21 @@
 ; X86FC - x86 File Commander, MSX-DOS2 / Nextor 파일 관리자 (프로그램 이름 X86FC.COM)
 ;
 ; 버전 이력 (최신이 위)
+; 0.12.50: 편집기 클립보드를 별도 매퍼 쪽에 (글 한도까지, 쪽이 없으면 CPBUF 760바이트)
+; 0.12.49: SCREEN 0 오른쪽 테두리(열 79) + 팝업이 덮은 칸만 VRAM 에 저장·복원 (확인 팝업을 취소하면 다시 그리지 않음).  LNSZ 2048 -> 1920
+; 0.12.48: 압축 풀기 속도 — 일치 복사 ldir 로 한꺼번에, CRC 를 레지스터·바이트별 표로, 허프만 첫 8비트 직접 조회표 + 16비트 비트 완충 (LZH·ARJ·ZIP)
+; 0.12.47: 메모리 구조 정리 — 압축 풀기(오버레이 13)·편집기 큰 파일 명령(오버레이 14)을 분리해 가장 큰 칸을 3229B 로 줄이고 OVSZ 3840 -> 3232, MAXE 180 -> 191.  OVN 15
+; 0.12.46: 편집기 EUC-KR: 7H 에서 EUC-KR 로 보이는 파일을 열 때 UTF-8 로 바꿔 열지 물음(한글 완성형만, 기호·한자는 ?), 바꿔 열면 저장 때 EUC-KR 로 되돌림(못 바꾸는 글자가 있으면 UTF-8 저장 선택). 저장은 오버레이 12. OVN 13
+; 0.12.45: 편집기 큰 파일(창 방식: 버퍼에 파일 토막만 읽고, 커서가 끝에 다가오면 고친 것을 되쓴 뒤 창을 옮김; 찾기·줄 이동·전부 바꾸기가 창을 가로지름).  시작(파일 열기)을 오버레이 11 로 분리, OVN 12
+; 0.12.44: 편집기 되돌리기 Ctrl+Z (글 쪽 뒤쪽 1536바이트에 연산 기록: 바이트 입력·지우기·끼워 넣기마다 기록, 가득 차면 새로 시작; 전부 바꾸기는 되돌릴 수 없음).  글 한도 16000 → 14848 바이트
+; 0.12.43: 편집기 블록 선택(Shift+방향키·Ctrl+B)·복사 Ctrl+C·자르기 Ctrl+X·붙이기 Ctrl+V·줄 지우기 Ctrl+Y·줄 복제 Ctrl+D (클립보드 CPBUF 760바이트).  편집기 시작(파일 열기)은 오버레이 10 으로 옮김(오버레이 1 = 편집 본체)
+; 0.12.42: 편집기(F3) 찾기·바꾸기·줄 이동·위치 표시 — Ctrl+F 찾기, F3/Ctrl+N 다음, Ctrl+R 바꾸기(하나씩 Y/N 또는 전부 A), Ctrl+G 줄 이동, 제목 줄에 줄:칸. 명령은 오버레이 10(ov_edit2.inc), 편집기 상태는 쪽 3(edvars.inc). OVN 11
+; 0.12.41: ARJ 풀기(방식 0~3, CRC32, 유닉스 시각 날짜 보정) = 오버레이 9. 오버레이 6 의 매퍼 끼움 구간 루틴(ar_ldd, ar_run)을 앞쪽(8000h 아래)으로 옮겨 크기 한계 완화. OVN 10. PMA 는 pm0 만
+; 0.12.40: ZIP deflate 32KB 창 — 덩어리(8KB) 단위로 여분 매퍼 쪽(최대 2)에 저장, 쪽 전환 보조 루틴은 쪽 3(LVSTK+528). 여분 쪽 부족하면 Need more mapper pages 6
+; 0.12.39: ZIP 풀기 — stored·deflate(고정·동적), CRC32, 4바이트 크기, 하위 폴더 경로. 풀기 모듈 오버레이 8(매퍼 쪽). 드라이버 변수는 쪽 3(AV)으로 이동. 창 약 9.7KB(먼 거리 참조 = Extract failed 6)
+; 0.12.38: LZH 풀기 — 목록에서 Space 표시·A 모두 표시, Enter 로 반대 패널 폴더에 풀기(-lh0-/-lh4-/-lh5-, CRC16 검사, 날짜 보존, 덮어쓰기 질문, 진행 팝업, ESC 중단). 풀기 모듈은 오버레이 7(매퍼 쪽 하나에 올려 실행). OVSZ 3328 -> 3840, MAXE 190 -> 180
+; 0.12.37: 압축 파일 목록 보기 (LZH·LHA·PMA 머리 수준 0·1·2, ZIP, ARJ) — 오버레이 6 (ov_arc.inc), Enter 로 연결 프로그램이 없는 압축 파일을 열면 서명으로 알아보고 목록을 보임 (풀기는 다음 판)
+; 0.12.36: draw_fk 가 그리는 순간의 Shift 를 직접 읽음 (누가 불러도 같은 상태)
 ; 0.12.35: Shift 를 누르고 있는 동안 기능키 줄이 F6~F10 으로 유지되게 (SNSMAT + NEWKEY 이중 확인, 뗌은 3 jiffy 이상 계속일 때만). 패널 항목 한도 MAXE 192 -> 190
 ; 0.12.34: 빌드 도구만 변경 — mkovl.py 가 NOHGL(글꼴 없는 시험용) OVL 을 실행파일 폴더에 쓰지 않고, rel_new.sh 가 릴리스 OVL 크기를 검사 (COM·OVL 은 0.12.33 과 같음)
 ; 0.12.33: SCREEN 7·7H 팝업을 닫을 때 화면 전체가 아니라 팝업이 덮었던 줄만 다시 그림
@@ -174,7 +189,7 @@ K_SPACE         equ     20h             ; 입력 글자 앞을 한 칸 고르기
 TYPE_TIMEOUT    equ     90              ; 입력 글자를 기다리는 시간 (1/60 초 단위)
 
 ; ---- 크기 ----
-MAXE            equ     190; 패널 하나의 항목 수 한도
+MAXE            equ     191; 패널 하나의 항목 수 한도
 ENSZ            equ     24              ; 항목 하나의 크기
 PSZ             equ     84              ; 패널 상태 하나의 크기
 LISTROWS        equ     18              ; 패널의 목록 줄 수. 줄 0 = 경로, 1 = 가로선, 2~19 = 목록, 20 = 가로선, 21 = 정보(긴 이름 + 개수), 22 = 가로선(전체), 23 = 기능키 안내
@@ -209,8 +224,8 @@ SRCHATTR        equ     37h             ; 찾을 속성: 읽기전용(01h)·숨�
 
 ; ---- 작업 영역 (BSS) ----
 BSS             equ     code_end+16        ; 코드·글꼴 뒤 (아래 code_end 검사). 모두 본체 TPA 안
-OVSZ            equ     3328           ; 오버레이 창 크기 (X86FC.OVL 한 칸 = OVSZ 바이트)
-OVN             equ     6                       ; (0.12.14) 오버레이 칸 수 (X86FC.OVL 앞부분). 그 뒤 16바이트 표식 + 글꼴 11172자 x 18B + EUC-KR 표
+OVSZ            equ     3232           ; 오버레이 창 크기 (X86FC.OVL 한 칸 = OVSZ 바이트)
+OVN             equ     15                      ; (0.12.14) 오버레이 칸 수 (X86FC.OVL 앞부분). 그 뒤 16바이트 표식 + 글꼴 11172자 x 18B + EUC-KR 표
 HGB             equ     OVN*OVSZ+16             ; OVL 안 글꼴 시작 위치
 OVBASE          equ     BSS             ; 오버레이 창 (코드 바로 뒤 — 편집기가 8000h 쪽을 매퍼로 바꿔 끼우므로 8000h 아래에 둠)
 PTR0            equ     OVBASE+OVSZ
@@ -219,7 +234,7 @@ ENT0            equ     PTR1+MAXE*2
 ENT1            equ     ENT0+MAXE*ENSZ
 FIB             equ     fibmem          ; 64 바이트 (프로그램 파일 정보)
 OLDFNK          equ     ENT1+MAXE*ENSZ  ; 시작할 때의 기능키 글자 영역 160 바이트 (끝낼 때 되돌림)
-LNSZ            equ     2048          ; 패널마다 긴 이름 저장소
+LNSZ            equ     1920          ; 패널마다 긴 이름 저장소 (0.12.49: 2048 -> 1920, 팝업 복원·테두리 코드 자리 확보)
 LFN_MAX         equ     100             ; 긴 이름 하나에서 보관하는 글자 수 한도
 LN0             equ     OLDFNK+160
 LN1             equ     LN0+LNSZ
@@ -528,7 +543,7 @@ ml_f5:          call    typeclr                 ; F5 = MSX-BASIC (DOS 의 BASIC 
                 ld      hl,txt_f5q              ; 먼저 팝업으로 물어봄
                 call    popup_yn
                 jr      z,f5_go
-                call    draw_all
+                call    draw_nc                 ; (0.12.49) SCREEN 0 은 팝업이 덮은 칸을 이미 되돌림
                 jp      ml_next
 f5_go:          xor     a
                 ld      (cl_tmp),a
@@ -549,7 +564,7 @@ VBUF            equ     SECBUF
 do_view:        ld      a,4                     ; 보기 = 오버레이 4 (7H 깃발을 끄지 않고 그림)
                 ld      b,0
                 jp      ov_go
-do_edit:        ld      a,1
+do_edit:        ld      a,11                    ; (0.12.45) 시작(파일 열기)은 오버레이 11, 편집 본체는 오버레이 1, 명령은 오버레이 10
                 ld      b,0
                 jp      ov_go
 ; (0.12.27) 연결 줄의 내부 명령: HL = 명령 틀. #VIEW = F2 와 같은 내부 보기, #EDIT = F3 와 같은 내부 편집기.
@@ -600,6 +615,10 @@ txt_i_edit:     db      "#EDIT",0
 txt_unkint:     db      "Unknown internal command",0
 txt_ppok:       db      "[Enter] OK",0
 ; ---- 오버레이 0 의 진입점 (본체에는 껍데기만 남김) ----
+; ---- (0.12.37) 압축 파일 목록 (오버레이 6): Z = 압축 파일을 보여 줌, NZ = 압축 파일이 아님
+do_arc:         ld      a,6
+                ld      b,0
+                jp      ov_go
 do_find:        ld      a,0
                 ld      b,0
                 jp      ov_go
@@ -1242,6 +1261,9 @@ popup_yn:       ld      (pp_t1),hl              ; HL = 질문 글 → Z = 예 (Y
                 ld      (pp_minw),a
                 call    popup_core
                 call    wait_key
+                push    af
+                call    pop_rest                ; (0.12.49) 덮었던 칸 복원
+                pop     af
                 and     0DFh
                 cp      'Y'
                 ret     z
@@ -1256,6 +1278,9 @@ popup_ask:      ld      (pp_t1),hl
                 ld      (pp_minw),a
                 call    popup_core
                 call    wait_key
+                push    af
+                call    pop_rest
+                pop     af
                 cp      'a'
                 ret     c
                 cp      'z'+1
@@ -1288,6 +1313,7 @@ pc_c:           ld      (pp_w),a
                 sub     b
                 srl     a
                 ld      (pp_c),a
+                call    pop_save                ; (0.12.49) SCREEN 0: 덮일 칸 저장
                 xor     a
                 ld      (pp_i),a
 pp_l:           ld      a,(pp_one)              ; (0.12.14) 0 이 아니면 그 줄 하나만 그림
@@ -5481,12 +5507,14 @@ gh_n:           ld      hl,(hi_p)
                 ret
 hi_i:           db      0
 
-il_ok:          call    hk_off
+il_ok:          call    pop_rest
+                call    hk_off
                 ld      hl,0
                 ld      (msg_p),hl
                 xor     a
                 ret
-il_esc:         call    hk_off
+il_esc:         call    pop_rest
+                call    hk_off
                 ld      hl,0
                 ld      (msg_p),hl
                 or      1
@@ -6160,13 +6188,18 @@ run_cur:        xor     a
                 cp      1
                 jr      nz,rc_fl
                 ld      hl,VLBUF                ; 하나면 그대로 실행
-                jr      rc_have
+                jp      rc_have
 rc_fl:          push    ix
                 call    find_link               ; HL = 명령 틀 (없으면 0)
                 pop     ix
                 ld      a,h
                 or      l
-                jr      nz,rc_have
+                jp      nz,rc_have
+                call    do_arc                  ; (0.12.37) 연결이 없으면 압축 파일인지 보고 목록을 보임
+                jr      nz,rc_na
+                call    clear_screen
+                jp      draw_all
+rc_na:          call    cur_ix
                 ld      a,(sv_ext)              ; 연결된 프로그램이 없으면 팝업으로 물어봄 → 예 = Ctrl+F3 식 프로그램 목록 팝업
                 cp      ' '
                 jr      z,rc_noext
@@ -6191,7 +6224,7 @@ rc_nxe:         ld      hl,txt_nolk2
                 jr      nz,rc_nolk
                 call    cur_ix
                 jp      vl_manage
-rc_nolk:        call    draw_all
+rc_nolk:        call    draw_nc
                 ret
 rc_noext:       ld      hl,txt_norun            ; (확장자가 없는 파일만 안내 글)
                 ld      (msg_p),hl
@@ -7658,6 +7691,143 @@ sw_l:           ld      a,(hl)
                 djnz    sw_l
                 ret
 
+; ---- (0.12.49) SCREEN 0 오른쪽 테두리 (열 79): 목록 줄은 │, 가로선 줄(1, 목록 아래, 기능키 위)은 ─.  정보 줄·기능키 줄은 80칸을 다 쓰므로 그리지 않음.  왼쪽은 열 0 이 패널 글이라 없음
+draw_rb:        ld      a,(s7_on)
+                or      a
+                ret     nz
+                xor     a
+                ld      (dv_r),a
+rb_l:           ld      a,(v_rrule)
+                inc     a
+                ld      b,a                     ; B = 정보 줄
+                ld      a,(dv_r)
+                cp      b
+                jr      z,rb_n
+                ld      c,CH_VBAR
+                cp      1
+                jr      z,rb_h
+                ld      hl,v_rrule
+                cp      (hl)
+                jr      z,rb_h
+                ld      hl,v_rbot
+                cp      (hl)
+                jr      nz,rb_w
+rb_h:           ld      c,CH_HBAR
+rb_w:           ld      a,c
+                ld      (dv_c),a
+                ld      a,(dv_r)
+                call    row_addr
+                ld      de,79
+                add     hl,de
+                ld      de,dv_c
+                ld      b,1
+                call    scr_write
+rb_n:           ld      a,(dv_r)
+                inc     a
+                ld      (dv_r),a
+                cp      23
+                jr      c,rb_l
+                ret
+; 팝업이 덮은 칸을 이미 되돌렸으면(SCREEN 0) 다시 그리지 않음, 그 밖(SCREEN 7 등)은 draw_all
+draw_nc:        ld      a,(s7_on)
+                or      a
+                ret     z
+                jp      draw_all
+; ---- (0.12.49) SCREEN 0: 팝업이 덮는 칸(8~14 줄, pp_c 열부터 pp_w 칸)을 VRAM 3000h~ 에 저장했다가 닫을 때 되돌림 (qd_tmp 를 거쳐)
+pop_save:       ld      a,(s7_on)
+                or      a
+                ret     nz
+                ld      a,(pop_sv)
+                or      a
+                ret     nz
+                inc     a
+                ld      (pop_sv),a
+                ld      a,(pp_c)
+                ld      (ps_c),a
+                ld      a,(pp_w)
+                ld      (ps_w),a
+                xor     a
+                ld      (ps_i),a
+psv_l:          ld      a,(ps_i)
+                add     a,8
+                call    row_addr
+                ld      a,(ps_c)
+                ld      e,a
+                ld      d,0
+                add     hl,de
+                call    psv_rd
+                ld      a,(ps_i)
+                call    psv_ad
+                call    psv_wr
+                ld      a,(ps_i)
+                inc     a
+                ld      (ps_i),a
+                cp      7
+                jr      c,psv_l
+                ret
+pop_rest:       ld      a,(pop_sv)
+                or      a
+                ret     z
+                xor     a
+                ld      (pop_sv),a
+                ld      (ps_i),a
+prs_l:          ld      a,(ps_i)
+                call    psv_ad
+                call    psv_rd
+                ld      a,(ps_i)
+                add     a,8
+                call    row_addr
+                ld      a,(ps_c)
+                ld      e,a
+                ld      d,0
+                add     hl,de
+                call    psv_wr
+                ld      a,(ps_i)
+                inc     a
+                ld      (ps_i),a
+                cp      7
+                jr      c,prs_l
+                ret
+psv_ad:         ld      h,a                     ; A = 줄 → HL = 3000h + A x 128
+                ld      l,0
+                srl     h
+                rr      l
+                ld      de,3000h
+                add     hl,de
+                ret
+psv_rd:         ld      a,(vdp_cmd)             ; HL = VRAM 주소 → qd_tmp 에 ps_w 바이트
+                ld      c,a
+                di
+                out     (c),l
+                ld      a,h
+                and     3Fh
+                out     (c),a
+                ei
+                ld      a,(vdp_dat)
+                ld      c,a
+                ld      hl,qd_tmp
+                ld      a,(ps_w)
+                ld      b,a
+psr_l:          in      a,(c)
+                ld      (hl),a
+                inc     hl
+                djnz    psr_l
+                ret
+psv_wr:         call    scr_vaddr               ; qd_tmp 의 ps_w 바이트 → VRAM HL
+                ld      a,(vdp_dat)
+                ld      c,a
+                ld      hl,qd_tmp
+                ld      a,(ps_w)
+                ld      b,a
+psw_l:          ld      a,(hl)
+                out     (c),a
+                inc     hl
+                djnz    psw_l
+                ret
+pop_sv:         db      0
+ps_c:           db      0
+ps_w:           db      0
+ps_i:           db      0
 ; A = 줄 번호 → HL = 줄 시작 80 (이름표 주소)
 row_addr:       ld      l,a
                 ld      h,0
@@ -7785,7 +7955,9 @@ sc_4:           ld      a,(de)
                 jp      s7_enter
 
 ; 이름표는 공백으로, 깜박임(강조)은 0 으로
-clear_screen:   ld      a,(s7_on)
+clear_screen:   xor     a
+                ld      (pop_sv),a
+                ld      a,(s7_on)
                 or      a
                 jp      nz,s7_clear
                 ld      hl,0
@@ -7967,7 +8139,9 @@ sa_p2e:         ld      hl,(sa_cnt)
                 ret
 
 ; 모두 다시 그림
-draw_all:       ld      a,(s7_ovb)              ; (0.12.21) 오버레이 실행 중이 아니면 얇은 선 배치로 그림
+draw_all:       xor     a
+                ld      (pop_sv),a
+                ld      a,(s7_ovb)              ; (0.12.21) 오버레이 실행 중이 아니면 얇은 선 배치로 그림
                 or      a
                 jr      nz,da_o
                 ld      a,(s7_thm)
@@ -7990,6 +8164,7 @@ da_o:           ld      a,(s7_dirty)
                 ld      b,79
                 call    scr_write
                 call    draw_divider
+                call    draw_rb
                 xor     a
                 call    panel_ix
                 call    draw_panel
@@ -8789,7 +8964,9 @@ txt_fkeys:      db      "1Help           2View           3Edit           4Screen
 txt_fkeys2:     db      "6Rename         7MkDir          8Sort           9Drive          10Exit          "
 shift_st:       db      0
 ; 기능키 안내 줄: Shift 를 누르고 있으면 F6~F10, 아니면 F1~F5
-draw_fk:        ld      a,(v_rfkey)
+; (0.12.36) 누가 부르든 그리는 순간의 Shift 를 직접 읽어(fk_now) 그림: 키 기다리는 루프 밖(draw_all 등)에서 불려도 같은 상태
+draw_fk:        call    fk_now
+                ld      a,(v_rfkey)
                 call    row_addr
                 ld      de,txt_fkeys
                 ld      a,(shift_st)
@@ -8798,10 +8975,18 @@ draw_fk:        ld      a,(v_rfkey)
                 ld      de,txt_fkeys2
 dfk_n:          ld      b,80
                 jp      scr_write
-; Shift 가 눌렸다 떼어지면 안내 줄을 바꿈 (키 기다리는 동안 계속 봄).
+; Shift 가 눌렸다 떼어지면 안내 줄을 바꿈 (키 기다리는 동안 계속 봄)
+fk_shift:       ld      a,(shift_st)
+                push    af                      ; (BIOS 호출이 C 를 망가뜨리므로 스택에)
+                call    fk_now
+                pop     bc
+                cp      b
+                ret     z
+                jp      draw_fk
+; 지금의 Shift → A (1 = 눌림), shift_st 를 갱신.
 ; (0.12.35) 실기에서 Shift 를 누르고 있는데 약 3초 뒤 F1~F5 로 돌아가던 것 대비: SNSMAT 값과 BIOS 키 인터럽트가 갱신하는
 ;  NEWKEY 표(FBE5h+6)를 모두 보아 하나라도 "눌림"이면 눌림으로 보고, "뗌"은 3 jiffy(1/20초) 이상 계속 뗀 것으로 읽혔을 때만 인정
-fk_shift:       ld      a,(0FBEBh)              ; NEWKEY 행 6
+fk_now:         ld      a,(0FBEBh)              ; NEWKEY 행 6
                 ld      b,a
                 ld      a,6
                 ld      ix,SNSMAT
@@ -8826,11 +9011,8 @@ fks_rel:        ld      hl,(JIFFY)
                 ld      a,0
                 jr      nc,fks_set
                 ld      a,(shift_st)            ; 잠깐 뗀 것으로 읽힘: 그대로 둠
-fks_set:        ld      hl,shift_st
-                cp      (hl)
-                ret     z
-                ld      (hl),a
-                jp      draw_fk
+fks_set:        ld      (shift_st),a
+                ret
 fk_t:           dw      0
 fk_codes:       db      K_F1,K_F2,K_F3,K_F4,K_F5,K_F6,K_F7,K_F8,K_F9,K_F10   ; F9 는 동작 없음 (글자 안 나옴, ^W 와 겹치지 않게)
 ; 직접 만든 글자 모양 (한 글자 8 줄, 왼쪽 6 비트). (0.12.25) 1점 가는 선: 세로선은 왼쪽에서 셋째 점(20h),

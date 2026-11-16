@@ -435,7 +435,7 @@ hp_wait:        call    wait_key
                 jp      h_on
 hp_r:           db      0
 ; F1 안내 (한 줄 = 글 하나, 끝 0FFh)
-help_txt:       db      "X86FC 0.12.33 - Help",0
+help_txt:       db      "X86FC 0.12.35 - Help",0
                 db      " ",0
                 db      "FUNCTION KEYS   (F6-F10 = Shift+F1 ... Shift+F5)",0
                 db      "F1          Help                      F6          Rename",0

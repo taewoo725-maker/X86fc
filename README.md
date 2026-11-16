@@ -2,7 +2,7 @@
 
 **x86 File Commander** · 두 패널 · 긴 파일 이름(VFAT) · 한글 · SCREEN 7
 
-MSX-DOS2 / Nextor 에서 쓰는 `.COM` 파일 관리자입니다. Z80 어셈블리(pasmo)로 만들었고, 실행 파일(현재 0.12.34)은 **`X86FC.COM` + `X86FC.OVL` + `X86FC.INI` 세 개**입니다.
+MSX-DOS2 / Nextor 에서 쓰는 `.COM` 파일 관리자입니다. Z80 어셈블리(pasmo)로 만들었고, 실행 파일(현재 0.12.35)은 **`X86FC.COM` + `X86FC.OVL` + `X86FC.INI` 세 개**입니다.
 
 - 만든이: KimTaeWoo
 - 라이선스: GPL-3.0-or-later (`LICENSE`). 한글 글꼴 Galmuri9(OFL)는 `release/Galmuri_OFL_LICENSE.txt` 참고
@@ -85,7 +85,7 @@ python3 ../tools/mkovl.py .            # 오버레이+글꼴 -> 실행파일/X86
 ## 확인한 환경과 한계
 - 에뮬레이터(MSX2, MSX-DOS 2.20)에서 모든 기능을 시험했고, 실기(FS-A1GT turboR + Nextor)에서는 프로그램 실행 복귀, 한글 이름 표시, 긴 이름 표시, 풀다운, 파일 연결 저장을 확인했습니다.
 - 한/영 키 입력, F3 한글 편집, F5 복귀, 가는 선 틀은 실기 확인 중입니다.
-- 한 폴더 항목 최대 약 190개, FAT12/16(FAT32 미지원), 편집기는 파일 16000바이트까지.
+- 한 폴더 항목 최대 190개, FAT12/16(FAT32 미지원), 편집기는 파일 16000바이트까지.
 - 압축 파일 열기, 편집기 찾기/바꾸기는 아직 없습니다.
 
 의견과 오류 제보 환영합니다.

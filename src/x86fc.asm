@@ -4,6 +4,7 @@
 ; X86FC - x86 File Commander, MSX-DOS2 / Nextor 파일 관리자 (프로그램 이름 X86FC.COM)
 ;
 ; 버전 이력 (최신이 위)
+; 0.12.35: Shift 를 누르고 있는 동안 기능키 줄이 F6~F10 으로 유지되게 (SNSMAT + NEWKEY 이중 확인, 뗌은 3 jiffy 이상 계속일 때만). 패널 항목 한도 MAXE 192 -> 190
 ; 0.12.34: 빌드 도구만 변경 — mkovl.py 가 NOHGL(글꼴 없는 시험용) OVL 을 실행파일 폴더에 쓰지 않고, rel_new.sh 가 릴리스 OVL 크기를 검사 (COM·OVL 은 0.12.33 과 같음)
 ; 0.12.33: SCREEN 7·7H 팝업을 닫을 때 화면 전체가 아니라 팝업이 덮었던 줄만 다시 그림
 ; 0.12.32: 팝업 오버레이(드라이브·열기 목록·사용자 메뉴·정렬) 안의 draw_all 이 균일 격자로 28줄 표를 그려 화면 밖의 DOS 화면 맡김을 깨뜨리던 것 고침 (0.12.21 부터)
@@ -173,7 +174,7 @@ K_SPACE         equ     20h             ; 입력 글자 앞을 한 칸 고르기
 TYPE_TIMEOUT    equ     90              ; 입력 글자를 기다리는 시간 (1/60 초 단위)
 
 ; ---- 크기 ----
-MAXE            equ     192; 패널 하나의 항목 수 한도
+MAXE            equ     190; 패널 하나의 항목 수 한도
 ENSZ            equ     24              ; 항목 하나의 크기
 PSZ             equ     84              ; 패널 상태 하나의 크기
 LISTROWS        equ     18              ; 패널의 목록 줄 수. 줄 0 = 경로, 1 = 가로선, 2~19 = 목록, 20 = 가로선, 21 = 정보(긴 이름 + 개수), 22 = 가로선(전체), 23 = 기능키 안내
@@ -8797,17 +8798,40 @@ draw_fk:        ld      a,(v_rfkey)
                 ld      de,txt_fkeys2
 dfk_n:          ld      b,80
                 jp      scr_write
-; Shift 가 눌렸다 떼어지면 안내 줄을 바꿈 (키 기다리는 동안 계속 봄)
-fk_shift:       ld      a,6
+; Shift 가 눌렸다 떼어지면 안내 줄을 바꿈 (키 기다리는 동안 계속 봄).
+; (0.12.35) 실기에서 Shift 를 누르고 있는데 약 3초 뒤 F1~F5 로 돌아가던 것 대비: SNSMAT 값과 BIOS 키 인터럽트가 갱신하는
+;  NEWKEY 표(FBE5h+6)를 모두 보아 하나라도 "눌림"이면 눌림으로 보고, "뗌"은 3 jiffy(1/20초) 이상 계속 뗀 것으로 읽혔을 때만 인정
+fk_shift:       ld      a,(0FBEBh)              ; NEWKEY 행 6
+                ld      b,a
+                ld      a,6
                 ld      ix,SNSMAT
                 call    bios
-                and     1                       ; bit 0 = SHIFT (0 = 눌림)
-                xor     1
-                ld      hl,shift_st
+                and     b                       ; 둘 중 하나라도 0 이면 bit 0 = 0 (눌림)
+                and     1
+                jr      nz,fks_rel
+                ld      hl,(JIFFY)
+                ld      (fk_t),hl               ; 마지막으로 눌린 것을 본 때
+                ld      a,1
+                jr      fks_set
+fks_rel:        ld      hl,(JIFFY)
+                ld      de,(fk_t)
+                or      a
+                sbc     hl,de
+                ld      a,h
+                or      a
+                ld      a,0
+                jr      nz,fks_set              ; 오래전에 눌림 → 뗌
+                ld      a,l
+                cp      3
+                ld      a,0
+                jr      nc,fks_set
+                ld      a,(shift_st)            ; 잠깐 뗀 것으로 읽힘: 그대로 둠
+fks_set:        ld      hl,shift_st
                 cp      (hl)
                 ret     z
                 ld      (hl),a
                 jp      draw_fk
+fk_t:           dw      0
 fk_codes:       db      K_F1,K_F2,K_F3,K_F4,K_F5,K_F6,K_F7,K_F8,K_F9,K_F10   ; F9 는 동작 없음 (글자 안 나옴, ^W 와 겹치지 않게)
 ; 직접 만든 글자 모양 (한 글자 8 줄, 왼쪽 6 비트). (0.12.25) 1점 가는 선: 세로선은 왼쪽에서 셋째 점(20h),
 ; 가로선은 다섯째 줄(FCh = 칸 폭 전체). 선이 칸 경계까지 닿아서 이웃 칸과 이어지고, 교차부에 틈이 없음.

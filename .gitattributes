@@ -1,0 +1,11 @@
+* text=auto
+*.COM binary
+*.OVL binary
+*.bin binary
+*.png binary
+*.zip binary
+*.asm text eol=lf
+*.inc text eol=lf
+*.py text eol=lf
+*.INI binary
+*.cfg text eol=lf

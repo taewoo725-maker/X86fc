@@ -58,8 +58,10 @@ for n, mod, ents in sorted(cfg):
 hg = os.path.join(os.getcwd(), 'hgl.bin')
 if os.path.exists(hg) and not os.environ.get('NOHGL'):
     out += b'X86FC-HGL1'.ljust(16, bytes(1)) + open(hg, 'rb').read()
-os.makedirs('실행파일', exist_ok=True)
-open('실행파일/X86FC.OVL', 'wb').write(out)
+# (0.12.34) 글꼴 없는 시험용 OVL(NOHGL)은 릴리스 폴더에 쓰지 않음 (/tmp 에만): 릴리스 OVL 은 항상 글꼴 포함
+if not os.environ.get('NOHGL'):
+    os.makedirs('실행파일', exist_ok=True)
+    open('실행파일/X86FC.OVL', 'wb').write(out)
 open('/tmp/X86FC.OVL', 'wb').write(out)
 for n, mod, ents in cfg:
     os.remove('ov%d.asm' % n); os.remove('ov%d.bin' % n)

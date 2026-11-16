@@ -70,7 +70,7 @@ h7s_v:           ld      de,v_lrows
                 add     hl,hl
                 add     hl,de
                 add     hl,hl
-                ld      de,hv_geo
+                ld      de,hv_geo-10            ; (방식 0 = 글자 화면은 표가 없음: 앞 10 바이트는 읽어도 쓰지 않음)
                 add     hl,de
                 ld      de,s7_geo
                 ld      bc,10
@@ -124,17 +124,20 @@ h_on:           push    af
                 ld      a,(s7_on)
                 or      a
                 jr      z,h7o_x
+                ld      a,(s7_ovb)              ; (0.12.33) 균일 격자로 화면을 쓴 전체 화면 오버레이(ovb = 1)만 해시를 비워 다시 그림.
+                ld      (s7_dirty),a            ; 팝업 오버레이(ovb = 0)는 팝업이 덮은 줄만 다시 그림 (pop_y0~pop_y1)
                 xor     a
                 ld      (s7_ovb),a
                 ld      a,(s7_thm)
                 ld      (s7_th),a
-                ld      (s7_dirty),a            ; (0.12.21) 오버레이·팝업이 격자를 바꿨으니 해시를 비워 다시 그리게
                 ld      a,(s7_hm)
                 ld      (s7_h),a
 h7o_x:          pop     af
                 ret
 ov_ret:         jr      h_on                    ; (오버레이가 ret 하면 여기로: h_on 이 ret)
 ; 팝업 상자 한 줄 쓰기: 8점 줄 격자로 찍고 7H 로 되돌림
+; (0.12.33) 얇은 선 배치 위에 그리는 팝업은 해시를 건드리지 않고(swp_f) 덮은 y 범위만 pop_y0~pop_y1 에 기억해,
+;  닫은 뒤 draw_all 이 그 범위와 겹치는 줄(s7_popinv)만 다시 그림 (예전: 전체 해시 무효 → 화면 전체가 깜박임)
 scr_writep:     ld      a,(s7_th)               ; 팝업 글: 균일 8점 격자로 (얇은 선 배치와 7H 격자를 잠깐 끔)
                 ld      (swp_t),a
                 ld      a,(s7_h)
@@ -146,8 +149,11 @@ scr_writep:     ld      a,(s7_th)               ; 팝업 글: 균일 8점 격자
                 xor     a
                 ld      (s7_th),a
                 inc     a
-                ld      (s7_dirty),a
+                ld      (swp_f),a
+                call    pw_mark
                 call    scr_write
+                xor     a
+                ld      (swp_f),a
                 ld      a,(swp_t)
                 ld      (s7_th),a
                 ret
@@ -155,19 +161,102 @@ swp_7:          xor     a
                 ld      (s7_th),a
                 ld      (s7_h),a
                 inc     a
-                ld      (s7_dirty),a
+                ld      (swp_f),a
                 ld      (s7_hp),a               ; (0.11) 8점 줄이지만 한글 쌍은 9x9 글꼴로
+                call    pw_mark
                 call    scr_write
                 xor     a
                 ld      (s7_hp),a
+                ld      (swp_f),a
                 inc     a
                 ld      (s7_h),a
                 ld      a,(swp_t)
                 ld      (s7_th),a
                 ret
+; HL = 팝업 줄의 글자 칸 주소 (줄 x 80) → 그 줄이 덮는 y 범위(2 + 줄 x 8 ~ +8)를 pop_y0~pop_y1 에 넓혀 둠 (레지스터 보존)
+pw_mark:        push    hl
+                push    de
+                push    bc
+                ld      de,80
+                ld      c,0
+pm_l:           or      a
+                sbc     hl,de
+                jr      c,pm_d
+                inc     c
+                jr      pm_l
+pm_d:           ld      a,c
+                add     a,a
+                add     a,a
+                add     a,a
+                add     a,2                     ; (S7_Y0)
+                ld      hl,pop_y0
+                cp      (hl)
+                jr      nc,pm_a
+                ld      (hl),a
+pm_a:           add     a,8
+                ld      hl,pop_y1
+                cp      (hl)
+                jr      c,pm_e
+                ld      (hl),a
+pm_e:           pop     bc
+                pop     de
+                pop     hl
+                ret
+; draw_all: 팝업이 덮은 y 범위와 겹치는 줄(얇은 선 배치의 줄 표 ytab 기준)만 해시를 비움
+s7_popinv:      ld      a,(s7_on)
+                or      a
+                jr      z,pi_r
+                ld      e,0
+pi_l:           ld      l,e
+                ld      h,0
+                ld      bc,ytab
+                add     hl,bc
+                ld      b,(hl)                  ; B = 줄 맨 위 y
+                ld      a,(v_rfkey)
+                cp      e
+                ld      a,b
+                jr      nz,pi_n1
+                add     a,9                     ; 맨 아래 줄은 다음 표가 없으니 9점으로
+                jr      pi_c
+pi_n1:          inc     hl
+                ld      a,(hl)                  ; A = 줄 끝 y (다음 줄 맨 위)
+pi_c:           ld      c,a
+                ld      a,b
+                ld      hl,pop_y1
+                cp      (hl)
+                jr      nc,pi_nx                ; 줄 위 >= 팝업 끝: 안 겹침
+                ld      a,c
+                ld      hl,pop_y0
+                cp      (hl)
+                jr      c,pi_nx
+                jr      z,pi_nx                 ; 줄 끝 <= 팝업 시작: 안 겹침
+                ld      l,e
+                ld      h,0
+                add     hl,hl
+                add     hl,hl
+                ld      bc,s7_hash
+                add     hl,bc
+                ld      a,0FFh
+                ld      (hl),a
+                inc     hl
+                ld      (hl),a
+                inc     hl
+                ld      (hl),a
+                inc     hl
+                ld      (hl),a
+pi_nx:          inc     e
+                ld      a,(v_rfkey)
+                cp      e
+                jr      nc,pi_l
+pi_r:           xor     a
+                ld      (pop_y1),a
+                dec     a
+                ld      (pop_y0),a
+                ret
 ; draw_all 맨 앞: 팝업이 8점 줄로 덮었으면 7H 줄 해시를 비움
 s7_undirty:     xor     a
                 ld      (s7_dirty),a
+                call    pi_r                    ; (0.12.33) 전체를 비우니 팝업 범위 기억도 지움
                 ld      a,(s7_on)
                 or      a
                 ret     z
@@ -589,7 +678,7 @@ hd_row:         di
 ; ---- 자료
 ; 방식별 s7_geo (줄 높이, 정보 줄 높이, 맨 위 선, 머리 아래 선, 목록 아래 선, 기능키 위 선: (선 위치, 띠 높이)).
 ;  보이는 간격 = 위 글자 셀 아래 빈 점 + 띠 위 여백 / 띠 아래 여백 + 아래 글자 셀 위 빈 점 이 모두 1점이 되게.
-hv_geo:         db      8,8, 0,1, 0,1, 0,1, 0,1       ; 0 글자 (안 씀)
+hv_geo:
                 db      8,8, 0,2, 0,2, 0,2, 1,3       ; 1 SCREEN 7: 8점 글꼴은 아래 1점이 비고 위는 잉크 (정보 줄 화살표 아이콘은 8점 꽉 참 → 기능키 위 선은 위·아래 여백 1점)
                 db      9,10, 0,1, 0,1, 0,1, 0,1      ; 2 7H: ASCII·아이콘은 위 1점·아래 1~2점이 비어 선 띠는 선 1점만 (정보 줄 한글은 아래가 선에 붙음)
                 db      9,9, 0,1, 0,1, 0,1, 1,2       ; 3 7H tight: 정보 줄 화살표 아이콘이 9점 칸 아래까지 차서 기능키 위 선만 위 1점 띄움 (한글은 선에 붙음)
@@ -610,6 +699,9 @@ s7_thm:         db      0                       ; 얇은 선 배치를 쓰는 �
 s7_th:          db      0                       ; 지금 그리는 화면이 얇은 선 배치 (팝업·오버레이를 그리는 동안은 0)
 s7_ovb:         db      0                       ; 오버레이 실행 중
 swp_t:          db      0
+swp_f:          db      0                       ; 팝업 글을 쓰는 중: 해시를 쓰지 않음
+pop_y0:         db      0FFh                    ; 팝업이 덮은 y 범위 (닫은 뒤 그 줄만 다시 그림)
+pop_y1:         db      0
 s7_geo:         db      8,8, 0,2, 0,2, 0,2, 0,2   ; (0.12.31) 얇은 선 배치: 보통 줄·정보 줄 높이, 맨 위·머리 아래·목록 아래·기능키 위 선 띠(선 위치, 높이)
 ytab:           ds      32                      ; 줄 번호 -> y (얇은 선 배치)
 v_lrows:        db      LISTROWS                ; 목록 줄 수

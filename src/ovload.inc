@@ -36,11 +36,25 @@ og_run:         pop     bc
                 ld      (s7_ovb),a
                 ld      a,c
                 cp      2
-                jr      nc,og_go
+                jr      nc,og_pop
                 cp      1                       ; (0.12.17) 편집기(1번 칸)는 7H 격자를 유지
                 jr      z,og_go
                 xor     a                       ; 0번 칸: 8점 줄 (7H 에서도)
                 ld      (s7_h),a
+                jr      og_go
+; (0.12.32) 팝업 목록 칸(사용자 메뉴 2, 열기 목록 3, 이동·드라이브·정렬 5)은 얇은 선 배치를 유지: 안에서 draw_all 을 부르는데 균일 격자로
+;  그리면 줄 표(SCREEN 7 은 28줄)가 화면 밖(y 212~)에 써서 DOS 화면 맡김(VRAM D400h~)을 깨뜨림.  도움말(3번 칸 2번 진입)·보기(4)는 균일 격자
+og_pop:         cp      4
+                jr      z,og_go
+                cp      3
+                jr      nz,og_pp
+                ld      a,b
+                cp      2
+                jr      z,og_go
+og_pp:          ld      a,(s7_thm)
+                ld      (s7_th),a
+                xor     a
+                ld      (s7_ovb),a
 og_go:          ld      l,b
                 ld      h,0
                 ld      e,l

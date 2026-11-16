@@ -2,7 +2,7 @@
 
 **x86 File Commander** · 두 패널 · 긴 파일 이름(VFAT) · 한글 · SCREEN 7
 
-MSX-DOS2 / Nextor 에서 쓰는 `.COM` 파일 관리자입니다. Z80 어셈블리(pasmo)로 만들었고, 실행 파일은 **`X86FC.COM` + `X86FC.OVL` + `X86FC.INI` 세 개**입니다.
+MSX-DOS2 / Nextor 에서 쓰는 `.COM` 파일 관리자입니다. Z80 어셈블리(pasmo)로 만들었고, 실행 파일(현재 0.12.34)은 **`X86FC.COM` + `X86FC.OVL` + `X86FC.INI` 세 개**입니다.
 
 - 만든이: KimTaeWoo
 - 라이선스: GPL-3.0-or-later (`LICENSE`). 한글 글꼴 Galmuri9(OFL)는 `release/Galmuri_OFL_LICENSE.txt` 참고

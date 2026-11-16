@@ -4,6 +4,10 @@
 ; X86FC - x86 File Commander, MSX-DOS2 / Nextor 파일 관리자 (프로그램 이름 X86FC.COM)
 ;
 ; 버전 이력 (최신이 위)
+; 0.12.34: 빌드 도구만 변경 — mkovl.py 가 NOHGL(글꼴 없는 시험용) OVL 을 실행파일 폴더에 쓰지 않고, rel_new.sh 가 릴리스 OVL 크기를 검사 (COM·OVL 은 0.12.33 과 같음)
+; 0.12.33: SCREEN 7·7H 팝업을 닫을 때 화면 전체가 아니라 팝업이 덮었던 줄만 다시 그림
+; 0.12.32: 팝업 오버레이(드라이브·열기 목록·사용자 메뉴·정렬) 안의 draw_all 이 균일 격자로 28줄 표를 그려 화면 밖의 DOS 화면 맡김을 깨뜨리던 것 고침 (0.12.21 부터)
+; 0.12.31: 선 띠·줄 높이 재설계 — 선과 글자 사이 보이는 간격 1점, 7H 목록 20줄(tight 20줄)
 ; 0.12.30: F4 로 글자 화면 0 에서 SCREEN 7 로 바꾸면 줄 표(얇은 선 배치·틀·맨 위 선)가 적용되지 않던 것 고침
 ; 0.12.29: SCREEN 7·7H 맨 위 가로 테두리선(1점)으로 틀을 닫음 (선 띠를 3점으로 줄여 목록 줄 수 유지)
 ; 0.12.28: SCREEN 7·7H 좌우 바깥 여백에 1점 세로 테두리선(x 14, 491)을 넣고 가로선 3개를 테두리까지 이어 패널 전체를 틀로 감쌈
@@ -2641,9 +2645,6 @@ drm_n:          db      0
 drm_sel:        db      0
 drm_i:          db      0
 drv_list:       ds      18
-drv_n:          db      0
-drv_i:          db      0
-drv_ch:         db      0
 drv_p:          dw      0
 
 ; 오류 코드 A 에 해당하는 알림 글 (HL = 글)
@@ -7973,6 +7974,9 @@ draw_all:       ld      a,(s7_ovb)              ; (0.12.21) 오버레이 실행 
 da_o:           ld      a,(s7_dirty)
                 or      a
                 call    nz,s7_undirty
+                ld      a,(pop_y1)              ; (0.12.33) 팝업이 덮은 줄만 해시를 비워 그 줄만 다시 그림
+                or      a
+                call    nz,s7_popinv
                 call    draw_fk                 ; 기능키 안내 (평소 F1~F5, Shift 를 누르면 F6~F10)
                 ld      hl,hbuf                ; 기능키 안내 줄과 가로선 (전체 폭, 세로선이 만나는 39 열 포함)
                 ld      de,hbuf+1
@@ -9017,7 +9021,7 @@ linebuf:        ds      40
 oldpath:        ds      64
 errbuf:         ds      72
 specbuf:        ds      80
-fibmem:         ds      192                     ; (여유) FIB 가 64 바이트 보다 넉넉하게 되는지 보려는 여백
+fibmem:         ds      64                      ; FIB (파일 정보 64 바이트)
 pstate:         ds      PSZ*2
 code_end:
                 if      code_end > BSS

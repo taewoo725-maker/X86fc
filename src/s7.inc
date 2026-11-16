@@ -434,7 +434,10 @@ s7w_e:          add     hl,de
                 ld      hl,v_rbot
                 cp      (hl)
                 ret     z
-s7w_n:          call    s7_hslot
+s7w_n:          ld      a,(swp_f)               ; (0.12.33) 팝업 글은 해시 없이 바로 그림
+                or      a
+                jr      nz,s7_draw
+                call    s7_hslot
                 or      a
                 jr      z,s7_draw
                 push    hl

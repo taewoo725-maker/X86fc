@@ -146,15 +146,32 @@ ar_ext:         ld      hl,(ar_n)
                 call    mk_addr
                 or      (hl)
                 ld      (hl),a
-ae_go:          call    map_init
-                jr      c,ae_nm
+ae_go:          call    ar_dstf                 ; (0.12.55) 풀 폴더 고르기 풀다운(오버레이 15): 반대 패널 폴더에서 시작 (PROGBUF), 고르면 ar_ext2 로 돌아옴
+                pop     hl
+                ld      a,15
+                ld      b,0
+                jp      ov_go
+ar_ext2:        ld      ix,(ar_pix)             ; 고른 폴더(PROGBUF)를 반대 패널의 폴더로 (풀고 나면 거기를 보여 줌)
+                push    ix
+                pop     hl
+                ld      de,PS_PATH
+                add     hl,de
+                ex      de,hl
+                ld      hl,PROGBUF
+                call    copy_z
+                xor     a
+                ld      (de),a
+                ld      hl,0
+                ld      (ar_xc),hl
+                call    map_init
+                jp      c,ae_nm
                 call    mp_alloc
-                jr      c,ae_nm
+                jp      c,ae_nm
                 ld      (ar_seg),a
                 call    mp_getp2
                 ld      (ar_p2),a
                 call    ar_ldd
-                jr      nz,ae_ld
+                jp      nz,ae_ld
                 call    ar_dstf
                 ld      hl,0
                 ld      (ar_t),hl
@@ -183,6 +200,26 @@ ae_end:         ld      a,(ar_seg)
                 ld      bc,31
                 ld      (hl),0
                 ldir
+                ld      de,errbuf               ; (0.12.55) 결과 안내: "Extracted N file(s) to 폴더"
+                ld      hl,ar_tdone
+                call    copy_z
+                ld      hl,(ar_xc)
+                call    put_dec16
+                ld      hl,ar_tdone2
+                call    copy_z
+                ld      hl,PROGBUF
+                ld      b,30
+ae_pp:          ld      a,(hl)
+                or      a
+                jr      z,ae_pe
+                ld      (de),a
+                inc     hl
+                inc     de
+                djnz    ae_pp
+ae_pe:          xor     a
+                ld      (de),a
+                ld      hl,errbuf
+                call    ae_msg
                 pop     hl                      ; 목록(오버레이 6)으로: 반대 패널을 다시 읽고 목록을 그림
                 ld      a,6
                 ld      b,1
@@ -323,6 +360,9 @@ ao_c:           ld      a,b
                 ld      b,a
                 ld      c,F_CLOSE
                 call    BDOS
+                ld      hl,(ar_xc)              ; (0.12.55) 푼 파일 수
+                inc     hl
+                ld      (ar_xc),hl
 ao_ok:          xor     a
                 ret
 ao_err:         ld      a,(ar_ho)               ; 실패: 파일을 닫고 (CRC 오류는 지울지 물음)
@@ -511,6 +551,8 @@ af_s:           push    hl
                 ld      a,'_'
 af_ok:          ret
 
+ar_tdone:       db      "Extracted ",0
+ar_tdone2:      db      " file(s) to ",0
 ar_tnomap:      db      "Need more mapper pages",0
 ar_tnodec:      db      "Cannot load decoder",0
 ar_tovw:        db      "Overwrite ",0

@@ -92,6 +92,18 @@ dv_key:         call    wait_key
                 jr      z,dv_bot
                 cp      'B'
                 jr      z,dv_bot
+                cp      06h                     ; Ctrl+F = 찾기, n / F3 = 다음, p = 이전
+                jp      z,dv_find
+                cp      'n'
+                jp      z,dv_nxt
+                cp      'N'
+                jp      z,dv_nxt
+                cp      10h
+                jp      z,dv_nxt
+                cp      'p'
+                jp      z,dv_prv
+                cp      'P'
+                jp      z,dv_prv
                 jr      dv_key
 dv_end:         ld      a,(v_h)
                 ld      b,a
@@ -117,11 +129,11 @@ dv_pul:         push    bc
                 call    v_up1
                 pop     bc
                 djnz    dv_pul
-                jr      dv_draw
+                jp      dv_draw
 dv_top:         ld      hl,0
                 ld      (v_top),hl
                 ld      (v_top+2),hl
-                jr      dv_draw
+                jp      dv_draw
 dv_bot:         ld      a,(s7_h)
                 or      a
                 jr      z,dv_bot8
@@ -981,7 +993,323 @@ vs_dn:          ld      hl,(v_s)
                 inc     hl
 vs_t:           ld      (v_top+2),hl
                 ret
-txt_vfoot:      db      "Up/Dn line   Left/Right/Space page   Home top   B bottom   Esc close",0
+; ---- 찾기 (0.12.52): Ctrl+F 로 글을 묻고(영문, 대소문자 무시, 바이트 비교 = UTF-8 한글은 못 찾음), n/F3 다음, p 이전.
+;  파일을 2000 바이트씩 읽어 가며 훑음(덩어리 끝에 걸친 것은 겹쳐 읽음). 찾으면 그 줄(앞 줄바꿈 뒤)이 맨 위로 옴.
+dv_find:        xor     a
+                ld      (in_len),a
+                ld      (inbuf),a
+                ld      (il_first),a
+                ld      a,2
+                ld      (il_raw),a
+                ld      hl,txt_vfq
+                call    input_line
+                push    af
+                xor     a
+                ld      (il_raw),a
+                pop     af
+                jp      nz,dv_rd
+                ld      a,(in_len)
+                or      a
+                jp      z,dv_rd
+                cp      33
+                jr      c,fz_a
+                ld      a,32
+fz_a:           ld      (v_sl),a
+                ld      b,a
+                ld      hl,inbuf
+                ld      de,v_sn
+fz_c:           ld      a,(hl)
+                call    up_a
+                ld      (de),a
+                inc     hl
+                inc     de
+                djnz    fz_c
+                xor     a
+                ld      (v_mv),a
+                jr      dv_go0
+dv_nxt:         xor     a
+                jr      dv_s1
+dv_prv:         ld      a,1
+dv_s1:          ld      (v_dir),a
+                ld      a,(v_sl)
+                or      a
+                jp      z,dv_find
+                jr      dv_go
+dv_go0:         xor     a
+                ld      (v_dir),a
+dv_go:          call    fz_run
+                or      a
+                jp      nz,dv_rd
+                ld      hl,txt_vnf
+                ld      de,txt_vok
+                call    popup_ask
+dv_rd:          call    clear_screen            ; 입력·알림 상자 자국을 지우고 다시 그림
+                call    v_foot_draw
+                jp      dv_draw
+; → A = 1 찾음(v_top 이 그 줄 처음) / 0 없음
+fz_run:         ld      hl,0
+                ld      (v_clen),hl             ; VBUF 를 덮어쓰므로 보기 캐시 무효
+                ld      a,(v_dir)
+                or      a
+                jp      nz,fz_back
+                call    fz_cur
+                jr      nz,fz_ft
+                ld      hl,(v_mp)               ; 지난 번 찾은 자리 + 1 부터
+                ld      de,(v_mp+2)
+                inc     hl
+                ld      a,h
+                or      l
+                jr      nz,fz_fs
+                inc     de
+                jr      fz_fs
+fz_ft:          ld      hl,(v_top)
+                ld      de,(v_top+2)
+fz_fs:          ld      (v_sp),hl
+                ld      (v_sp+2),de
+fz_fl:          call    fz_rd
+                ld      a,(v_sl)
+                ld      e,a
+                ld      d,0
+                or      a
+                sbc     hl,de
+                jp      c,fz_no
+                inc     hl
+                ld      b,h
+                ld      c,l
+                ld      hl,VBUF
+                call    fz_scan
+                jp      nz,fz_hit
+                ld      hl,(v_sn_n)
+                ld      de,2000
+                or      a
+                sbc     hl,de
+                jp      c,fz_no                 ; 덜 읽음 = 파일 끝
+                ld      a,(v_sl)
+                dec     a
+                ld      e,a
+                ld      d,0
+                ld      hl,2000
+                or      a
+                sbc     hl,de
+                ex      de,hl
+                ld      hl,(v_sp)
+                add     hl,de
+                ld      (v_sp),hl
+                jr      nc,fz_fl
+                ld      hl,(v_sp+2)
+                inc     hl
+                ld      (v_sp+2),hl
+                jr      fz_fl
+; 뒤로: Q(= v_q) 앞의 가장 가까운 것을 찾음
+fz_back:        call    fz_cur
+                jr      nz,fz_bt
+                ld      hl,(v_mp)
+                ld      de,(v_mp+2)
+                jr      fz_bs
+fz_bt:          ld      hl,(v_top)
+                ld      de,(v_top+2)
+fz_bs:          ld      (v_q),hl
+                ld      (v_q+2),de
+                ld      a,h
+                or      l
+                or      d
+                or      e
+                jp      z,fz_no
+fz_bl:          ld      a,(v_sl)                ; S = Q - (2000 - (길이-1)), 0 아래면 0
+                dec     a
+                ld      e,a
+                ld      d,0
+                ld      hl,2000
+                or      a
+                sbc     hl,de
+                ex      de,hl
+                ld      hl,(v_q)
+                or      a
+                sbc     hl,de
+                ld      de,(v_q+2)
+                jr      nc,fz_bn
+                ld      a,d
+                or      e
+                jr      z,fz_bz
+                dec     de
+fz_bn:          ld      (v_sp),hl
+                ld      (v_sp+2),de
+                jr      fz_br
+fz_bz:          ld      hl,0
+                ld      (v_sp),hl
+                ld      (v_sp+2),hl
+fz_br:          call    fz_rd
+                ld      de,(v_sp)               ; BC = Q - S (시작 후보 수)
+                ld      hl,(v_q)
+                or      a
+                sbc     hl,de
+                ld      b,h
+                ld      c,l
+                ld      hl,(v_sn_n)             ; 읽은 것 속에서 끝까지 들어가는 시작 수 = n - 길이 + 1
+                ld      a,(v_sl)
+                ld      e,a
+                ld      d,0
+                or      a
+                sbc     hl,de
+                jr      c,fz_b0
+                inc     hl
+                or      a
+                sbc     hl,bc
+                jr      nc,fz_bm                ; 충분: BC 그대로
+                add     hl,bc
+                ld      b,h
+                ld      c,l
+                jr      fz_bm
+fz_b0:          ld      bc,0
+fz_bm:          ld      hl,VBUF
+                call    fz_scan
+                jp      nz,fz_hit
+                ld      hl,(v_sp)               ; S = 0 이면 더 없음
+                ld      de,(v_sp+2)
+                ld      a,h
+                or      l
+                or      d
+                or      e
+                jp      z,fz_no
+                ld      hl,(v_sp)               ; Q = S 로 앞 덩어리
+                ld      (v_q),hl
+                ld      hl,(v_sp+2)
+                ld      (v_q+2),hl
+                jp      fz_bl
+; 찾음: HL = VBUF 안 자리 → v_mp(절대 위치), v_top(그 줄 처음, 덩어리 앞이면 덩어리 처음)
+fz_hit:         ld      de,VBUF
+                or      a
+                sbc     hl,de
+                ld      b,h
+                ld      c,l                     ; BC = 덩어리 안 번호
+                ld      hl,(v_sp)
+                add     hl,bc
+                ld      (v_mp),hl
+                ld      hl,(v_sp+2)
+                jr      nc,fz_h1
+                inc     hl
+fz_h1:          ld      (v_mp+2),hl
+                ld      hl,VBUF
+                add     hl,bc
+fz_hb:          ld      a,b
+                or      c
+                jr      z,fz_hs
+                dec     hl
+                dec     bc
+                ld      a,(hl)
+                cp      0Ah
+                jr      nz,fz_hb
+                inc     bc                      ; 줄바꿈 다음이 줄 처음
+fz_hs:          ld      hl,(v_sp)
+                add     hl,bc
+                ld      (v_top),hl
+                ld      hl,(v_sp+2)
+                jr      nc,fz_h2
+                inc     hl
+fz_h2:          ld      (v_top+2),hl
+                ld      hl,v_top
+                ld      de,v_ft
+                ld      bc,4
+                ldir
+                ld      a,1
+                ld      (v_mv),a
+                ret
+fz_no:          xor     a
+                ret
+; v_sp 에서 2000 바이트를 VBUF 에 읽음 → HL = 읽은 수 (v_sn_n)
+fz_rd:          ld      de,(v_sp+2)
+                ld      hl,(v_sp)
+                ld      a,(v_h)
+                ld      b,a
+                xor     a
+                ld      c,F_SEEK
+                call    BDOS
+                ld      a,(v_h)
+                ld      b,a
+                ld      de,VBUF
+                ld      hl,2000
+                ld      c,F_READ
+                call    BDOS
+                cp      E_EOF
+                jr      z,fz_rk
+                or      a
+                jr      z,fz_rk
+                ld      hl,0
+fz_rk:          ld      (v_sn_n),hl
+                ret
+; HL = 시작 번지, BC = 시작 후보 수 → NZ 이면 HL = 찾은 번지 (앞으로 = 첫 것, 뒤로 = 마지막 것)
+fz_scan:        ld      de,0
+                ld      (v_lh),de
+fz_sl:          ld      a,b
+                or      c
+                jr      z,fz_se
+                ld      a,(hl)
+                call    up_a
+                ld      d,a
+                ld      a,(v_sn)
+                cp      d
+                jr      nz,fz_sn
+                push    hl
+                push    bc
+                call    fz_cmp
+                pop     bc
+                pop     hl
+                jr      nz,fz_sn
+                ld      (v_lh),hl
+                ld      a,(v_dir)
+                or      a
+                jr      z,fz_se
+fz_sn:          inc     hl
+                dec     bc
+                jr      fz_sl
+fz_se:          ld      hl,(v_lh)
+                ld      a,h
+                or      l
+                ret
+; HL = 후보 → Z 이면 글 전체가 맞음
+fz_cmp:         ld      de,v_sn
+                ld      a,(v_sl)
+                ld      b,a
+fz_ml:          ld      a,(hl)
+                call    up_a
+                ld      c,a
+                ld      a,(de)
+                cp      c
+                ret     nz
+                inc     hl
+                inc     de
+                djnz    fz_ml
+                ret
+; 지난 번 찾은 줄이 그대로 맨 위에 있으면 Z (거기서부터 이어 찾음)
+fz_cur:         ld      a,(v_mv)
+                or      a
+                jr      nz,fz_cc
+                inc     a
+                ret
+fz_cc:          ld      hl,v_top
+                ld      de,v_ft
+                ld      b,4
+fz_ce:          ld      a,(de)
+                cp      (hl)
+                ret     nz
+                inc     hl
+                inc     de
+                djnz    fz_ce
+                ret
+txt_vfq:        db      "Find text",0
+txt_vnf:        db      "Text not found",0
+txt_vok:        db      "[Enter] OK",0
+txt_vfoot:      db      "Up/Dn line  Lt/Rt/Spc page  Home top  B end  ^F find  n/p next/prev  Esc close",0
+v_sl:           db      0
+v_dir:          db      0
+v_mv:           db      0
+v_sn:           ds      32
+v_mp:           ds      4
+v_ft:           ds      4
+v_sp:           ds      4
+v_q:            ds      4
+v_sn_n:         dw      0
+v_lh:           dw      0
 txt_vu8:        db      "UTF-8",0
 txt_vek:        db      "EUC-KR",0
 v_h:            db      0

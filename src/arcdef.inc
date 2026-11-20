@@ -58,6 +58,7 @@ ar_n1p          equ     AV+57
 ar_nx           equ     AV+59
 ar_fn           equ     AV+61
 ar_ptx          equ     AV+75
+ar_xc           equ     AV+115                  ; (0.12.55) 이번에 푼 파일 수 (2)
 DEC_OFS         equ     7*OVSZ                  ; X86FC.OVL 안 오버레이 7 의 위치
 DEC_RUN         equ     8000h
 AR_MARK         equ     CPBUF+1000              ; 표시 비트 (250 비트 = 32 바이트)

@@ -29,7 +29,11 @@ h7s_m:          ld      (s7_thm),a
                 ld      a,0
                 jr      nz,h7s_a
                 inc     a
-h7s_a:          ld      (s7_hm),a
+h7s_a:          ld      hl,s7_hm
+                ld      c,(hl)                  ; (0.12.54) 이전 한글 여부를 기억 (h_ohm): 한글 여부가 그대로면(0 <-> 7) 긴 이름을 디스크에서 다시 읽지 않음
+                ld      (hl),a
+                ld      a,c
+                ld      (h_ohm),a
                 ld      a,b
                 cp      2
                 jr      nz,h7s_n
@@ -86,7 +90,12 @@ h7s_h:           ld      (s7_h),a
                 call    h_panel
                 ld      ix,pstate+PSZ
 ; IX = 패널: 긴 이름을 새 방식(7H 면 한글 쌍)으로 다시 읽고 커서가 보이게 함
-h_panel:        ld      l,(ix+PS_LNB)
+; (0.12.54) 한글 여부가 그대로면(0 <-> 7) 이름은 그대로 두고 커서만 (줄 수가 바뀌었으니) 보이게
+h_panel:        ld      a,(h_ohm)
+                ld      hl,s7_hm
+                cp      (hl)
+                jr      z,hp_cur
+                ld      l,(ix+PS_LNB)
                 ld      h,(ix+PS_LNB+1)
                 ld      (ix+PS_LNP),l
                 ld      (ix+PS_LNP+1),h
@@ -111,9 +120,10 @@ h7p_c:           ld      a,b
 h7p_d:           push    ix
                 call    lfn_scan
                 pop     ix
-                ld      l,(ix+PS_CUR)
+hp_cur:         ld      l,(ix+PS_CUR)
                 ld      h,(ix+PS_CUR+1)
                 jp      set_cur
+h_ohm:          db      0                       ; 이전 한글 여부 (h_setmode 가 정함)
 
 ; 팝업·도움말·전체 화면 오버레이는 8점 줄 격자로 그림 (7H 깃발 s7_h 를 잠깐 끔)
 h_off:          xor     a

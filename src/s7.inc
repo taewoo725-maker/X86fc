@@ -144,8 +144,8 @@ mm_dr:          xor     a
                 ld      hl,si_c2
                 ld      (hl),'H'
 mm_dq:          ld      (si_ch),a
+                call    draw_all                ; (0.12.54) 화면을 먼저 그리고 설정 파일(INI)을 씀 (디스크 쓰기를 기다리는 동안 빈 화면이 보이지 않게)
                 call    s7_setini
-                call    draw_all
                 jp      ml_next
 
 s7_pal:         ld      hl,s7_palette

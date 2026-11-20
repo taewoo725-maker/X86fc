@@ -5,7 +5,7 @@
 ;
 ; 버전 이력 (최신이 위)
 ; 0.12.50: 편집기 클립보드를 별도 매퍼 쪽에 (글 한도까지, 쪽이 없으면 CPBUF 760바이트)
-; 0.12.49: SCREEN 0 오른쪽 테두리(열 79) + 팝업이 덮은 칸만 VRAM 에 저장·복원 (확인 팝업을 취소하면 다시 그리지 않음).  LNSZ 2048 -> 1920
+; 0.12.57: SCREEN 0 오른쪽 테두리(열 79, draw_rb)를 없앰 (0.12.49 이전처럼 열 79 에 아무것도 안 그림; SCREEN 7·7H 는 그대로).  0.12.49: SCREEN 0 오른쪽 테두리(열 79) + 팝업이 덮은 칸만 VRAM 에 저장·복원 (확인 팝업을 취소하면 다시 그리지 않음).  LNSZ 2048 -> 1920
 ; 0.12.48: 압축 풀기 속도 — 일치 복사 ldir 로 한꺼번에, CRC 를 레지스터·바이트별 표로, 허프만 첫 8비트 직접 조회표 + 16비트 비트 완충 (LZH·ARJ·ZIP)
 ; 0.12.47: 메모리 구조 정리 — 압축 풀기(오버레이 13)·편집기 큰 파일 명령(오버레이 14)을 분리해 가장 큰 칸을 3229B 로 줄이고 OVSZ 3840 -> 3232, MAXE 180 -> 191.  OVN 15
 ; 0.12.46: 편집기 EUC-KR: 7H 에서 EUC-KR 로 보이는 파일을 열 때 UTF-8 로 바꿔 열지 물음(한글 완성형만, 기호·한자는 ?), 바꿔 열면 저장 때 EUC-KR 로 되돌림(못 바꾸는 글자가 있으면 UTF-8 저장 선택). 저장은 오버레이 12. OVN 13
@@ -189,7 +189,7 @@ K_SPACE         equ     20h             ; 입력 글자 앞을 한 칸 고르기
 TYPE_TIMEOUT    equ     90              ; 입력 글자를 기다리는 시간 (1/60 초 단위)
 
 ; ---- 크기 ----
-MAXE            equ     191; 패널 하나의 항목 수 한도
+MAXE            equ     190; (0.12.53: 191 -> 190, 코드가 늘어 복사 버퍼 최소 2KB 를 지킴) 패널 하나의 항목 수 한도
 ENSZ            equ     24              ; 항목 하나의 크기
 PSZ             equ     84              ; 패널 상태 하나의 크기
 LISTROWS        equ     18              ; 패널의 목록 줄 수. 줄 0 = 경로, 1 = 가로선, 2~19 = 목록, 20 = 가로선, 21 = 정보(긴 이름 + 개수), 22 = 가로선(전체), 23 = 기능키 안내
@@ -225,7 +225,7 @@ SRCHATTR        equ     37h             ; 찾을 속성: 읽기전용(01h)·숨�
 ; ---- 작업 영역 (BSS) ----
 BSS             equ     code_end+16        ; 코드·글꼴 뒤 (아래 code_end 검사). 모두 본체 TPA 안
 OVSZ            equ     3232           ; 오버레이 창 크기 (X86FC.OVL 한 칸 = OVSZ 바이트)
-OVN             equ     15                      ; (0.12.14) 오버레이 칸 수 (X86FC.OVL 앞부분). 그 뒤 16바이트 표식 + 글꼴 11172자 x 18B + EUC-KR 표
+OVN             equ     16                      ; (0.12.55: 15 -> 16, 압축 풀 폴더 고르기 오버레이 15 추가) (0.12.14) 오버레이 칸 수 (X86FC.OVL 앞부분). 그 뒤 16바이트 표식 + 글꼴 11172자 x 18B + EUC-KR 표
 HGB             equ     OVN*OVSZ+16             ; OVL 안 글꼴 시작 위치
 OVBASE          equ     BSS             ; 오버레이 창 (코드 바로 뒤 — 편집기가 8000h 쪽을 매퍼로 바꿔 끼우므로 8000h 아래에 둠)
 PTR0            equ     OVBASE+OVSZ
@@ -5363,9 +5363,9 @@ il_bs:          xor     a
                 add     hl,de
                 ld      (hl),0
                 jp      il_draw
-il_hup:         ld      a,(il_raw)
-                or      a
-                jp      z,il_draw
+il_hup:         ld      a,(il_raw)              ; (il_raw = 1 일 때만 기록. 2 = 모든 글자 허용이지만 기록 없음: 보기의 찾기)
+                dec     a
+                jp      nz,il_draw
                 ld      a,(hi_i)
                 cp      4
                 jp      nc,il_draw
@@ -5381,8 +5381,8 @@ il_hup:         ld      a,(il_raw)
 il_hx:          pop     af
                 jp      il_draw
 il_hdn:         ld      a,(il_raw)
-                or      a
-                jp      z,il_draw
+                dec     a
+                jp      nz,il_draw
                 ld      a,(hi_i)
                 or      a
                 jp      z,il_draw
@@ -6259,6 +6259,8 @@ rg_nt:          ; --- 2) 배치 내용을 CPBUF 에: 명령(CL_TMP 0 = 프로그
                 ld      a,(cl_tmp)
                 or      a
                 jr      nz,rg_raw
+                ld      hl,txt_shl              ; (0.12.53) 프로그램은 "%SHELL% 프로그램" 으로: 하위 COMMAND2 가 돌리므로 Ctrl+C 로 끊어도
+                call    copy_z                  ;   "Terminate batch file?" 없이 배치로 돌아와 다음 줄(X86FC 복귀)이 실행됨
                 ld      hl,PROGBUF
                 call    cpz_dbl
                 ld      hl,TAILBUF              ; 길이, 공백 + 인자..., CR
@@ -7691,43 +7693,6 @@ sw_l:           ld      a,(hl)
                 djnz    sw_l
                 ret
 
-; ---- (0.12.49) SCREEN 0 오른쪽 테두리 (열 79): 목록 줄은 │, 가로선 줄(1, 목록 아래, 기능키 위)은 ─.  정보 줄·기능키 줄은 80칸을 다 쓰므로 그리지 않음.  왼쪽은 열 0 이 패널 글이라 없음
-draw_rb:        ld      a,(s7_on)
-                or      a
-                ret     nz
-                xor     a
-                ld      (dv_r),a
-rb_l:           ld      a,(v_rrule)
-                inc     a
-                ld      b,a                     ; B = 정보 줄
-                ld      a,(dv_r)
-                cp      b
-                jr      z,rb_n
-                ld      c,CH_VBAR
-                cp      1
-                jr      z,rb_h
-                ld      hl,v_rrule
-                cp      (hl)
-                jr      z,rb_h
-                ld      hl,v_rbot
-                cp      (hl)
-                jr      nz,rb_w
-rb_h:           ld      c,CH_HBAR
-rb_w:           ld      a,c
-                ld      (dv_c),a
-                ld      a,(dv_r)
-                call    row_addr
-                ld      de,79
-                add     hl,de
-                ld      de,dv_c
-                ld      b,1
-                call    scr_write
-rb_n:           ld      a,(dv_r)
-                inc     a
-                ld      (dv_r),a
-                cp      23
-                jr      c,rb_l
-                ret
 ; 팝업이 덮은 칸을 이미 되돌렸으면(SCREEN 0) 다시 그리지 않음, 그 밖(SCREEN 7 등)은 draw_all
 draw_nc:        ld      a,(s7_on)
                 or      a
@@ -8164,7 +8129,6 @@ da_o:           ld      a,(s7_dirty)
                 ld      b,79
                 call    scr_write
                 call    draw_divider
-                call    draw_rb
                 xor     a
                 call    panel_ix
                 call    draw_panel
@@ -8930,6 +8894,7 @@ sm2:            db      "Sort: size (largest first)",0
 sm3:            db      "Sort: date (newest first)",0
 txt_runbat:     db      "X86FCR1.BAT",0         ; 7 번째 글자(1/2)를 번갈아 씀
 txt_pause:      db      "PAUSE",13,10,0
+txt_shl:        db      "%SHELL% ",0
 envn_xb:        db      "X86FC_B",0
 rg_len:         dw      0
 txt_notmp:      db      "Cannot write X86FCR1.BAT / X86FCR2.BAT",0

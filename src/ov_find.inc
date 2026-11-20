@@ -336,7 +336,123 @@ fr_d:           call    clear_screen            ; (처음 한 번만: 이름표�
                 ld      a,23
                 call    qd_line
                 call    fr_all
-                jr      fr_k
+                call    fr_inf
+                jp      fr_k
+; 맨 아래 줄: 고른 결과의 긴 이름 (없으면 안내 글)
+fr_inf:         ld      a,(fd_sel)
+                call    fd_recadr2
+                ld      de,txt_fdfoot
+                jp      fd_info
+; HL = "경로\이름"(8.3) → 폴더 디렉터리에서 긴 이름을 찾아 LFNBUF 에 보일 글로 (찾았으면 lf_found = 1)
+fd_lname:       ld      (fd_lr),hl
+                ld      d,h
+                ld      e,l
+fl_s:           ld      a,(hl)
+                or      a
+                jr      z,fl_e
+                cp      '\'
+                jr      nz,fl_n
+                ld      d,h
+                ld      e,l
+fl_n:           inc     hl
+                jr      fl_s
+fl_e:           ld      (fl_bs),de
+                ld      hl,(fl_bs)
+                ld      de,(fd_lr)
+                or      a
+                sbc     hl,de
+                ld      a,l
+                cp      2
+                jr      nz,fl_c
+                inc     l                       ; 루트 "A:\" 는 '\' 까지
+fl_c:           ld      c,l
+                ld      b,0
+                ld      hl,(fd_lr)
+                ld      de,fd_lp
+                ldir
+                xor     a
+                ld      (de),a
+                ld      hl,fd_n11               ; 이름 → 11 칸 (8 + 3, 빈칸 채움)
+                ld      de,fd_n11+1
+                ld      bc,10
+                ld      (hl),' '
+                ldir
+                ld      hl,(fl_bs)
+                inc     hl
+                ld      de,fd_n11
+                ld      b,8
+fl_b:           ld      a,(hl)
+                or      a
+                jr      z,fl_go
+                cp      '.'
+                jr      z,fl_x
+                ld      (de),a
+                inc     hl
+                inc     de
+                djnz    fl_b
+                ld      a,(hl)
+                cp      '.'
+                jr      nz,fl_go
+fl_x:           inc     hl
+                ld      de,fd_n11+8
+                ld      b,3
+fl_y:           ld      a,(hl)
+                or      a
+                jr      z,fl_go
+                ld      (de),a
+                inc     hl
+                inc     de
+                djnz    fl_y
+fl_go:          ld      hl,fd_lp
+                ld      de,fd_n11
+                call    lf_capture
+                ld      a,(lf_found)
+                or      a
+                ret     z
+                jp      lf_conv
+; HL = "경로\이름", DE = 긴 이름이 없을 때 보일 글 → 맨 아래 줄(23)
+fd_info:        push    de
+                call    fd_lname
+                ld      hl,fd_ib
+                ld      de,fd_ib+1
+                ld      bc,78
+                ld      (hl),' '
+                ldir
+                xor     a
+                ld      (de),a
+                pop     hl
+                ld      a,(lf_found)
+                or      a
+                jr      z,fi_p0
+                ld      hl,txt_fdln
+fi_p0:          ld      de,fd_ib
+fi_p:           ld      a,(hl)
+                or      a
+                jr      z,fi_n
+                ld      (de),a
+                inc     hl
+                inc     de
+                jr      fi_p
+fi_n:           ld      a,(lf_found)
+                or      a
+                jr      z,fi_w
+                ld      hl,LFNBUF
+                ld      b,66
+fi_c:           ld      a,(hl)
+                or      a
+                jr      z,fi_w
+                ld      (de),a
+                inc     hl
+                inc     de
+                djnz    fi_c
+fi_w:           ld      hl,fd_ib
+                ld      a,(s7_hm)               ; 7H 이면 이 한 줄만 한글 쌍을 그림 (scr_writep 의 7H 경로; 끝나면 다시 8점 줄 상태로)
+                ld      (s7_h),a
+                ld      a,23
+                call    qd_line
+                xor     a
+                ld      (s7_h),a
+                ret
 ; 결과 목록 20 줄 (fd_top 부터)
 fr_all:         ld      a,(fd_top)
                 ld      (ff_i),a
@@ -426,11 +542,13 @@ fr_nu:          ld      a,(fd_ot)               ; 목록이 넘어갔으면 목�
                 cp      (hl)
                 jr      z,fr_2
                 call    fr_all
+                call    fr_inf
                 jr      fr_k
 fr_2:           ld      a,(fd_old)
                 call    fr_one
                 ld      a,(fd_sel)
                 call    fr_one
+                call    fr_inf
                 jr      fr_k
 fr_r:           cp      0Dh
                 jr      nz,fr_k
@@ -671,7 +789,13 @@ trs_d:          call    clear_screen            ; (처음 한 번만: 이름표�
                 xor     a
                 call    qd_line
                 call    trs_all
+                call    trs_inf
                 jr      trs_k
+; 맨 아래 줄: 고른 폴더의 긴 이름
+trs_inf:        call    tr_mkpath
+                ld      hl,tr_pb
+                ld      de,txt_trfoot
+                jp      fd_info
 ; 트리 22 줄 (tr_top 부터)
 trs_all:        ld      a,(tr_top)
                 ld      (tr_i),a
@@ -765,17 +889,19 @@ trs_nu:         ld      a,(tr_ot)               ; 목록이 넘어갔으면 목�
                 cp      (hl)
                 jr      z,trs_2
                 call    trs_all
+                call    trs_inf
                 jr      trs_k
 trs_2:          ld      a,(tr_old)
                 call    trs_one
                 ld      a,(tr_sel)
                 call    trs_one
+                call    trs_inf
                 jr      trs_k
 trs_r2:         cp      0Dh
                 jr      nz,trs_k
                 jp      tr_go
 ; 고른 항목의 경로를 만들어 활성 패널을 그 폴더로
-tr_go:          ld      a,(tr_sel)
+tr_mkpath:      ld      a,(tr_sel)
                 call    tr_adr
                 ld      a,(hl)
                 ld      (tr_d),a                ; 깊이
@@ -836,7 +962,9 @@ tg_a:           pop     bc
                 pop     bc
                 inc     c
                 jr      tg_l
-tg_x:           call    cur_ix
+tg_x:           ret
+tr_go:          call    tr_mkpath
+                call    cur_ix
                 call    path_save
                 push    ix
                 pop     de
@@ -855,6 +983,13 @@ tg_x:           call    cur_ix
                 jp      panel_load
 txt_trtit:      db      "Tree   Up/Down select   Enter go to folder   Esc close",0
 txt_trread:     db      "Reading folders...",0
+txt_trfoot:     db      0
+txt_fdln:       db      "Long name: ",0
+fd_ib:          ds      80
+fd_lp:          ds      66
+fd_n11:         ds      12
+fd_lr:          dw      0
+fl_bs:          dw      0
 fd_mode:        db      0
 tr_n:           db      0
 tr_sel:         db      0

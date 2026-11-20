@@ -584,7 +584,7 @@ ar_tzip:        db      "ZIP: ",0
 ar_tarj:        db      "ARJ: ",0
 ar_tfiles:      db      " files",0
 ar_tcol:        db      "   Name                           Original    Packed Date     Meth",0
-ar_thint:       db      " Up/Dn  Space mark  A all  Enter extract  ESC close",0
+ar_thint:       db      " Up/Dn  Space mark  A all  Enter extract to...  ESC close",0
 
 
 ; ======================================================================
@@ -626,6 +626,19 @@ ar_ext:         pop     hl                      ; ov_ret 버리고 (ov_go 가 �
                 jp      ov_go
 ar_resume:      ld      ix,(ar_pix)             ; (진입 1) 풀기 뒤: 반대 패널을 다시 읽고 목록을 다시 그림
                 call    panel_load
+                call    cur_ix                  ; (0.12.56) 활성 패널(압축 파일이 있는 쪽)도 다시 읽음: 같은 폴더에 풀면 새 파일이 바로 보이게 (커서는 압축 파일 이름으로)
+                ld      l,(ix+PS_CUR)
+                ld      h,(ix+PS_CUR+1)
+                call    ptr_get
+                call    disp_name
+                ld      hl,nmbuf
+                ld      de,upname
+                call    strcpy_nul
+                call    cur_ix
+                push    ix
+                call    panel_load
+                pop     ix
+                call    find_exact
 ar_back:        call    clear_screen            ; (진입 2) 목록 다시 그림
                 call    ar_head
                 call    ar_all
